@@ -49,3 +49,7 @@ upload-data/
 .playwright-mcp/
 
 # Keep package-lock.json, packages.lock.json, and pubspec.lock tracked.
+
+# Local secrets and development configuration
+**/appsettings.json
+**/appsettings.Development.json

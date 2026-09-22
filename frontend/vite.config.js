@@ -3,5 +3,12 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react()],
-  server: { host: 'localhost', port: 5173, strictPort: true },
+  server: {
+    host: 'localhost',
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      '/uploads': 'http://localhost:5080'
+    }
+  },
 })
