@@ -7,6 +7,8 @@ public class ApprovalDecision
     public string AdminId { get; set; } = string.Empty;
     public string Decision { get; set; } = string.Empty; // Approved, Rejected, RevisionRequested
     public string? Reason { get; set; }
+    public string? CustomHandlingInstructions { get; set; }
+    public string? OverriddenRoute { get; set; }
     public DateTime DecidedAt { get; set; } = DateTime.UtcNow;
 
     public RecoveryRequest RecoveryRequest { get; set; } = null!;

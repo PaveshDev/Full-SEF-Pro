@@ -155,6 +155,24 @@ export function HandoverPassCard({ recovery }) {
                   <ShieldCheck size={12} />
                   Admin Verified
                 </span>
+                {recovery?.plan?.isPreparationVerified && (
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      color: '#1E40AF',
+                      background: '#DBEAFE',
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: 'var(--radius-full)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}
+                  >
+                    <CheckCircle2 size={12} />
+                    Prep Verified
+                  </span>
+                )}
               </div>
               <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
                 Present this QR pass to the LoopWorth collection agent at doorstep collection
@@ -268,6 +286,32 @@ export function HandoverPassCard({ recovery }) {
                   </div>
                 </div>
               </div>
+
+              {/* Feature 5: Admin Custom Handling Directives */}
+              {(recovery?.plan?.adminHandlingInstructions || recovery?.approval?.decisionNotes) && (
+                <div
+                  style={{
+                    marginTop: '0.75rem',
+                    background: '#FFFBEB',
+                    border: '1px solid #FDE68A',
+                    borderRadius: '6px',
+                    padding: '0.5rem 0.75rem',
+                    display: 'flex',
+                    gap: '0.5rem',
+                    alignItems: 'flex-start'
+                  }}
+                >
+                  <AlertTriangle size={15} color="#D97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Special Courier / Handling Directives
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#92400E', marginTop: '2px', lineHeight: 1.4 }}>
+                      {recovery?.plan?.adminHandlingInstructions || recovery?.approval?.decisionNotes}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Preparation Readiness Checklist */}

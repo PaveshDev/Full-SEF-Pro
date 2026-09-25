@@ -33,7 +33,18 @@ public static class DbInitializer
                       ALTER TABLE ""CollectionRequests"" ADD COLUMN IF NOT EXISTS ""PartnerPhotoUrl"" text;
                       ALTER TABLE ""CollectionRequests"" ADD COLUMN IF NOT EXISTS ""PartnerFeedback"" text;
                       ALTER TABLE ""CollectionRequests"" ADD COLUMN IF NOT EXISTS ""PartnerConfirmedAt"" timestamp with time zone;
-                      ALTER TABLE ""CollectionRequests"" ADD COLUMN IF NOT EXISTS ""PartnerReceivedConditionOk"" boolean;");
+                      ALTER TABLE ""CollectionRequests"" ADD COLUMN IF NOT EXISTS ""PartnerReceivedConditionOk"" boolean;
+                      ALTER TABLE ""Items"" ADD COLUMN IF NOT EXISTS ""EcoHazardReportJson"" text;
+                      ALTER TABLE ""Items"" ADD COLUMN IF NOT EXISTS ""EcoHazardAcknowledged"" boolean DEFAULT FALSE;
+                      ALTER TABLE ""Items"" ADD COLUMN IF NOT EXISTS ""EcoHazardLevel"" text;
+                      ALTER TABLE ""RecoveryPlans"" ADD COLUMN IF NOT EXISTS ""ChecklistJson"" text;
+                      ALTER TABLE ""RecoveryPlans"" ADD COLUMN IF NOT EXISTS ""IsPreparationVerified"" boolean DEFAULT FALSE;
+                      ALTER TABLE ""RecoveryPlans"" ADD COLUMN IF NOT EXISTS ""AdminHandlingInstructions"" text;
+                      ALTER TABLE ""ApprovalDecisions"" ADD COLUMN IF NOT EXISTS ""CustomHandlingInstructions"" text;
+                      ALTER TABLE ""ApprovalDecisions"" ADD COLUMN IF NOT EXISTS ""OverriddenRoute"" text;
+                      ALTER TABLE ""CollectionRequests"" ADD COLUMN IF NOT EXISTS ""DeliveryEmailSent"" boolean DEFAULT FALSE;
+                      ALTER TABLE ""CollectionRequests"" ADD COLUMN IF NOT EXISTS ""DeliveryEmailSentAt"" timestamp with time zone;
+                      ALTER TABLE ""CollectionRequests"" ADD COLUMN IF NOT EXISTS ""DeliveryEmailSubject"" text;");
 
                 // Check for clean slate purge trigger
                 var triggerFile1 = Path.Combine(Directory.GetCurrentDirectory(), "purge_database.trigger");
@@ -82,28 +93,104 @@ public static class DbInitializer
             }
         }
 
-        // Seed Admin
-        var adminEmail = config["AdminSeed:Email"] ?? "admin@loopworth.local";
-        var adminPassword = config["AdminSeed:Password"] ?? "Admin123!";
-        if (await userManager.FindByEmailAsync(adminEmail) == null)
+        // Seed & Consolidate Admin: Keep strictly ONE admin with loopworthadmin@gmail.com
+        var adminEmail = config["AdminSeed:Email"] ?? Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? "loopworthadmin@gmail.com";
+        var adminPassword = config["AdminSeed:Password"] ?? Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? "Admin123!";
+
+        var adminUsers = (await userManager.GetUsersInRoleAsync("Admin")).ToList();
+
+        // Also check if any old admin exists by email or username
+        var oldAdminUsers = await context.Users
+            .Where(u => u.Email == "admin@loopworth.local" || u.UserName == "admin@loopworth.local")
+            .ToListAsync();
+        foreach (var oldUser in oldAdminUsers)
         {
-            var admin = new ApplicationUser
+            if (!adminUsers.Any(u => u.Id == oldUser.Id))
             {
-                UserName = adminEmail,
-                Email = adminEmail,
-                FullName = "System Admin",
-                EmailConfirmed = true
-            };
-            var result = await userManager.CreateAsync(admin, adminPassword);
-            if (result.Succeeded)
+                adminUsers.Add(oldUser);
+            }
+        }
+
+        var targetAdmin = await userManager.FindByEmailAsync(adminEmail);
+
+        if (targetAdmin == null)
+        {
+            if (adminUsers.Count > 0)
             {
-                await userManager.AddToRoleAsync(admin, "Admin");
-                logger.LogInformation("Seeded admin user: {Email}", adminEmail);
+                // Edit the existing old admin directly
+                targetAdmin = adminUsers[0];
+                targetAdmin.Email = adminEmail;
+                targetAdmin.NormalizedEmail = userManager.NormalizeEmail(adminEmail);
+                targetAdmin.UserName = adminEmail;
+                targetAdmin.NormalizedUserName = userManager.NormalizeName(adminEmail);
+                targetAdmin.EmailConfirmed = true;
+                await userManager.UpdateAsync(targetAdmin);
+
+                var token = await userManager.GeneratePasswordResetTokenAsync(targetAdmin);
+                await userManager.ResetPasswordAsync(targetAdmin, token, adminPassword);
+                logger.LogInformation("Updated old admin user to: {Email}", adminEmail);
             }
             else
             {
-                logger.LogWarning("Failed to seed admin: {Errors}",
-                    string.Join(", ", result.Errors.Select(e => e.Description)));
+                targetAdmin = new ApplicationUser
+                {
+                    UserName = adminEmail,
+                    Email = adminEmail,
+                    FullName = "System Admin",
+                    EmailConfirmed = true
+                };
+                var result = await userManager.CreateAsync(targetAdmin, adminPassword);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(targetAdmin, "Admin");
+                    logger.LogInformation("Seeded admin user: {Email}", adminEmail);
+                }
+                else
+                {
+                    logger.LogWarning("Failed to seed admin: {Errors}",
+                        string.Join(", ", result.Errors.Select(e => e.Description)));
+                }
+            }
+        }
+        else
+        {
+            targetAdmin.UserName = adminEmail;
+            targetAdmin.NormalizedUserName = userManager.NormalizeName(adminEmail);
+            targetAdmin.NormalizedEmail = userManager.NormalizeEmail(adminEmail);
+            targetAdmin.EmailConfirmed = true;
+            await userManager.UpdateAsync(targetAdmin);
+
+            if (!await userManager.IsInRoleAsync(targetAdmin, "Admin"))
+            {
+                await userManager.AddToRoleAsync(targetAdmin, "Admin");
+            }
+        }
+
+        // Delete all other admin users so only ONE admin remains in the system
+        if (targetAdmin != null)
+        {
+            var redundantAdmins = adminUsers.Where(u => u.Id != targetAdmin.Id).ToList();
+            foreach (var extra in redundantAdmins)
+            {
+                logger.LogInformation("Removing redundant admin user: {Email} ({Id})", extra.Email, extra.Id);
+
+                var decisions = await context.ApprovalDecisions.Where(d => d.AdminId == extra.Id).ToListAsync();
+                foreach (var d in decisions)
+                {
+                    d.AdminId = targetAdmin.Id;
+                }
+                await context.SaveChangesAsync();
+
+                await userManager.DeleteAsync(extra);
+            }
+
+            // Also clean up any extra users in AspNetUsers that have old admin emails
+            var residualOldAdmins = await context.Users
+                .Where(u => u.Id != targetAdmin.Id && (u.Email == "admin@loopworth.local" || u.UserName == "admin@loopworth.local"))
+                .ToListAsync();
+            foreach (var res in residualOldAdmins)
+            {
+                await userManager.DeleteAsync(res);
             }
         }
 

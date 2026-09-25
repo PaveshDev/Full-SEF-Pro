@@ -20,17 +20,26 @@ public class CollectionsController : ControllerBase
     private readonly ICollectionPlanningAgent _planAgent;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IFileStorageService _fileStorage;
+    private readonly IEmailService _emailService;
+    private readonly IDeliveryNotificationAgent _deliveryAgent;
+    private readonly ILogger<CollectionsController> _logger;
 
     public CollectionsController(
         AppDbContext context,
         ICollectionPlanningAgent planAgent,
         UserManager<ApplicationUser> userManager,
-        IFileStorageService fileStorage)
+        IFileStorageService fileStorage,
+        IEmailService emailService,
+        IDeliveryNotificationAgent deliveryAgent,
+        ILogger<CollectionsController> logger)
     {
         _context = context;
         _planAgent = planAgent;
         _userManager = userManager;
         _fileStorage = fileStorage;
+        _emailService = emailService;
+        _deliveryAgent = deliveryAgent;
+        _logger = logger;
     }
 
     private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
@@ -829,6 +838,8 @@ public class CollectionsController : ControllerBase
                     workflow.CompletedAt = DateTime.UtcNow;
                 }
             }
+
+            await TriggerDeliveryCompletionEmailAsync(collection);
         }
 
         await _context.SaveChangesAsync();
@@ -881,6 +892,7 @@ public class CollectionsController : ControllerBase
 
         await _context.SaveChangesAsync();
         await SyncAgentAvailabilityAsync(collection.AssignedCollectionAgentId);
+        await TriggerDeliveryCompletionEmailAsync(collection);
 
         return Ok(await MapToDtoAsync(collection));
     }
@@ -999,8 +1011,104 @@ public class CollectionsController : ControllerBase
 
         await _context.SaveChangesAsync();
         await SyncAgentAvailabilityAsync(collection.AssignedCollectionAgentId);
+        await TriggerDeliveryCompletionEmailAsync(collection);
 
         return Ok(await MapToDtoAsync(collection));
+    }
+
+    // POST /api/admin/collections/{id}/send-delivery-email - Manually trigger or resend delivery email
+    [HttpPost("api/admin/collections/{id:guid}/send-delivery-email")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SendDeliveryEmail(Guid id, CancellationToken ct)
+    {
+        var collection = await _context.CollectionRequests
+            .Include(c => c.Partner)
+            .Include(c => c.RecoveryRequest)
+            .ThenInclude(r => r.Item)
+            .ThenInclude(i => i.Category)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (collection == null) return NotFound(new { error = "Collection request not found." });
+
+        collection.DeliveryEmailSent = false; // Reset to allow explicit send/resend
+        await TriggerDeliveryCompletionEmailAsync(collection, ct);
+
+        return Ok(new
+        {
+            success = collection.DeliveryEmailSent,
+            sentAt = collection.DeliveryEmailSentAt,
+            subject = collection.DeliveryEmailSubject
+        });
+    }
+
+    private async Task TriggerDeliveryCompletionEmailAsync(CollectionRequest collection, CancellationToken ct = default)
+    {
+        if (collection.DeliveryEmailSent) return;
+
+        try
+        {
+            var customer = await _userManager.FindByIdAsync(collection.CustomerId);
+            if (customer == null || string.IsNullOrWhiteSpace(customer.Email))
+            {
+                _logger.LogWarning("Cannot send delivery email: customer {CustomerId} not found or email is empty.", collection.CustomerId);
+                return;
+            }
+
+            if (collection.Partner == null)
+            {
+                await _context.Entry(collection).Reference(c => c.Partner).LoadAsync(ct);
+            }
+            if (collection.RecoveryRequest == null)
+            {
+                await _context.Entry(collection).Reference(c => c.RecoveryRequest).LoadAsync(ct);
+            }
+            if (collection.RecoveryRequest?.Item == null && collection.RecoveryRequest != null)
+            {
+                await _context.Entry(collection.RecoveryRequest).Reference(r => r.Item).LoadAsync(ct);
+            }
+            if (collection.RecoveryRequest?.Item?.Category == null && collection.RecoveryRequest?.Item != null)
+            {
+                await _context.Entry(collection.RecoveryRequest.Item).Reference(i => i.Category).LoadAsync(ct);
+            }
+
+            var item = collection.RecoveryRequest?.Item;
+            var partner = collection.Partner;
+            if (item == null || partner == null)
+            {
+                _logger.LogWarning("Cannot send delivery email: item or partner is missing for collection {CollectionId}", collection.Id);
+                return;
+            }
+
+            var customerName = customer.FullName ?? customer.UserName ?? "Valued Customer";
+            var emailContent = await _deliveryAgent.GenerateDeliveryEmailAsync(
+                customerName,
+                customer.Email,
+                item,
+                partner,
+                collection.PartnerFeedback,
+                collection.PartnerReceivedConditionOk,
+                ct);
+
+            var sent = await _emailService.SendEmailAsync(
+                customer.Email,
+                customerName,
+                emailContent.Subject,
+                emailContent.HtmlBody,
+                ct);
+
+            if (sent)
+            {
+                collection.DeliveryEmailSent = true;
+                collection.DeliveryEmailSentAt = DateTime.UtcNow;
+                collection.DeliveryEmailSubject = emailContent.Subject;
+                await _context.SaveChangesAsync(ct);
+                _logger.LogInformation("Delivery completion email successfully dispatched via Brevo for collection {CollectionId} to {Email}", collection.Id, customer.Email);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to trigger delivery completion email for collection {CollectionId}", collection.Id);
+        }
     }
 
     private async Task<CollectionRequestDto> MapToDtoAsync(CollectionRequest c)
@@ -1065,6 +1173,9 @@ public class CollectionsController : ControllerBase
             PartnerFeedback = c.PartnerFeedback,
             PartnerConfirmedAt = c.PartnerConfirmedAt,
             PartnerReceivedConditionOk = c.PartnerReceivedConditionOk,
+            DeliveryEmailSent = c.DeliveryEmailSent,
+            DeliveryEmailSentAt = c.DeliveryEmailSentAt,
+            DeliveryEmailSubject = c.DeliveryEmailSubject,
             Item = c.RecoveryRequest?.Item != null ? new ItemDto
             {
                 Id = c.RecoveryRequest.Item.Id,

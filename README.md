@@ -88,7 +88,7 @@ The system automatically seeds the following ready-to-test accounts upon startup
 
 | Role | Email | Password | Scope |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `admin@loopworth.local` | `Admin123!` | Full platform administration, approvals, partner & fleet management, AI workflow audits |
+| **Admin** | `loopworthadmin@gmail.com` | `Admin123!` | Full platform administration, approvals, partner & fleet management, AI workflow audits |
 | **Collection Agent** | `agent@loopworth.local` | `Agent123!` | Field driver portal, assigned pickup route, milestone updates (`Collected`, `Delivered`) |
 | **Customer** | Sign up via `/register` or create new | Custom | Submit electronic waste, receive assessments, choose routes, select partners |
 

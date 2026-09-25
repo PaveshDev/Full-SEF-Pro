@@ -6,6 +6,7 @@ namespace LoopWorth.Application.Interfaces;
 public class ItemAssessmentResult
 {
     public bool IsCategoryMatch { get; set; } = true;
+    public string? InconsistencyType { get; set; } // "CategoryMismatch" or "DescriptionMismatch"
     public string? DetectedCategory { get; set; }
     public string? MismatchReason { get; set; }
     public ConditionLevel ConditionLevel { get; set; }
@@ -18,6 +19,27 @@ public class ItemAssessmentResult
 public interface IItemAssessmentAgent
 {
     Task<ItemAssessmentResult> AssessItemAsync(Item item, CancellationToken cancellationToken = default);
+}
+
+public class EcoImpactResult
+{
+    public bool IsHarmfulToEnvironment { get; set; }
+    public string HazardLevel { get; set; } = "Low"; // "None", "Low", "Moderate", "High", "Critical"
+    public List<string> DetectedHazards { get; set; } = new();
+    public string EnvironmentalAlert { get; set; } = string.Empty;
+    public List<string> HandlingPrecautions { get; set; } = new();
+    public decimal EstimatedCo2OffsetKg { get; set; }
+    public decimal EstimatedEwasteGrams { get; set; }
+    public bool IsEcoFriendly { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public bool CanBeDonated { get; set; } = true;
+    public string? DonationUnsuitabilityReason { get; set; }
+    public string? MandatoryRoute { get; set; }
+}
+
+public interface IEcoImpactAgent
+{
+    Task<EcoImpactResult> AssessEcoImpactAsync(Item item, CancellationToken cancellationToken = default);
 }
 
 public class RecoveryPlanResult
@@ -99,3 +121,29 @@ public interface IFileStorageService
     Task<string> SaveFileAsync(Stream fileStream, string fileName, string folder);
     Task DeleteFileAsync(string filePath);
 }
+
+public class DeliveryEmailContent
+{
+    public string Subject { get; set; } = string.Empty;
+    public string Greeting { get; set; } = string.Empty;
+    public string MessageBody { get; set; } = string.Empty;
+    public string HtmlBody { get; set; } = string.Empty;
+}
+
+public interface IDeliveryNotificationAgent
+{
+    Task<DeliveryEmailContent> GenerateDeliveryEmailAsync(
+        string customerName,
+        string customerEmail,
+        Item item,
+        Partner partner,
+        string? partnerFeedback,
+        bool? partnerReceivedConditionOk,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IEmailService
+{
+    Task<bool> SendEmailAsync(string toEmail, string toName, string subject, string htmlContent, CancellationToken cancellationToken = default);
+}
+

@@ -15,6 +15,9 @@ public class Item
     public ItemStatus Status { get; set; } = ItemStatus.Draft;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public string? EcoHazardReportJson { get; set; }
+    public bool EcoHazardAcknowledged { get; set; } = false;
+    public string? EcoHazardLevel { get; set; }
 
     public Category Category { get; set; } = null!;
     public ICollection<ItemImage> Images { get; set; } = new List<ItemImage>();

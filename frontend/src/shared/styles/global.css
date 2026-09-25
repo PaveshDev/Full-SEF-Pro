@@ -275,21 +275,27 @@ h4 { font-size: 1.125rem; }
 /* Layout shell */
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-sidebar {
   width: 260px;
+  height: 100vh;
   background-color: #FFFFFF;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .sidebar-header {
   padding: 1.5rem;
   border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
 }
 
 .brand-title {
@@ -314,6 +320,8 @@ h4 { font-size: 1.125rem; }
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .nav-link {
@@ -342,14 +350,19 @@ h4 { font-size: 1.125rem; }
 .sidebar-footer {
   padding: 1rem;
   border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
 }
 
 .app-main {
   flex: 1;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   min-width: 0;
   background-color: var(--background);
+  scroll-behavior: smooth;
 }
 
 .app-topbar {
@@ -360,6 +373,10 @@ h4 { font-size: 1.125rem; }
   align-items: center;
   justify-content: space-between;
   padding: 0 2rem;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  flex-shrink: 0;
 }
 
 .content-container {
@@ -442,8 +459,20 @@ h4 { font-size: 1.125rem; }
 }
 
 @media (max-width: 768px) {
-  .app-shell { flex-direction: column; }
-  .app-sidebar { width: 100%; }
+  .app-shell {
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+  .app-sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+  }
+  .app-main {
+    height: auto;
+    overflow: visible;
+  }
   .grid-2 { grid-template-columns: 1fr; }
   .content-container { padding: 1rem; }
 }

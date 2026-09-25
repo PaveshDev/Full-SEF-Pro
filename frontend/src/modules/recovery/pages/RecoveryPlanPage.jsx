@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router'
-import { ArrowLeft, Sparkles, AlertCircle, CheckCircle2, ArrowRight, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Sparkles, AlertCircle, CheckCircle2, ArrowRight, ShieldCheck, AlertTriangle, CheckSquare, Square, Lock, HelpCircle } from 'lucide-react'
 import { apiClient } from '../../../shared/services/apiClient.js'
 import { StatusChip } from '../../../shared/components/StatusChip.jsx'
 import { TopBar } from '../../../shared/components/TopBar.jsx'
@@ -13,6 +13,7 @@ export function RecoveryPlanPage() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [togglingChecklist, setTogglingChecklist] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -53,8 +54,39 @@ export function RecoveryPlanPage() {
     }
   }
 
+  // Toggle checklist step
+  const handleToggleChecklist = async (stepId, currentStatus) => {
+    try {
+      setTogglingChecklist(true)
+      const res = await apiClient.patch(`/api/recovery/${id}/checklist`, {
+        stepId,
+        isCompleted: !currentStatus
+      })
+      setRecovery(prev => {
+        if (!prev || !prev.plan) return prev
+        return {
+          ...prev,
+          plan: {
+            ...prev.plan,
+            checklist: res.data.checklist,
+            isPreparationVerified: res.data.isPreparationVerified
+          }
+        }
+      })
+    } catch {
+      setError('Failed to update preparation checklist.')
+    } finally {
+      setTogglingChecklist(false)
+    }
+  }
+
   // Submit for Admin Review
   const handleSubmit = async () => {
+    if (plan && !plan.isPreparationVerified) {
+      setError('Please complete all mandatory pre-collection preparation checklist steps before submitting for admin review.')
+      return
+    }
+
     setSubmitting(true)
     setError('')
     try {
@@ -237,8 +269,123 @@ export function RecoveryPlanPage() {
                 </div>
               )}
 
+              {/* Feature 5: Admin Special Handling Instructions (if added by Admin) */}
+              {plan.adminHandlingInstructions && (
+                <div style={{
+                  marginBottom: '1.5rem',
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderLeft: '4px solid #2563EB',
+                  padding: '1rem 1.25rem',
+                  borderRadius: 'var(--radius-sm)'
+                }}>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1E40AF', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                    <ShieldCheck size={18} color="#2563EB" />
+                    <span>Admin Special Handling & Safety Directives:</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.8125rem', color: '#1E3A8A', lineHeight: 1.5 }}>
+                    {plan.adminHandlingInstructions}
+                  </p>
+                </div>
+              )}
+
+              {/* Feature 2: Interactive Pre-Collection Readiness Checklist */}
+              {plan.checklist && plan.checklist.length > 0 && (() => {
+                const total = plan.checklist.length
+                const completed = plan.checklist.filter(c => c.isCompleted).length
+                const pct = Math.round((completed / total) * 100)
+                const isVerified = plan.isPreparationVerified
+
+                return (
+                  <div style={{
+                    marginBottom: '1.75rem',
+                    background: '#F8FAFC',
+                    border: `1px solid ${isVerified ? '#BBF7D0' : 'var(--border-light)'}`,
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1.25rem'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--dark)' }}>
+                          Pre-Collection Readiness Checklist
+                        </div>
+                        {isVerified ? (
+                          <span style={{ background: '#DCFCE7', color: '#166534', fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                            ✓ 100% Ready
+                          </span>
+                        ) : (
+                          <span style={{ background: '#FEF3C7', color: '#92400E', fontSize: '0.75rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                            {completed}/{total} Completed
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        All mandatory items required before submission
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div style={{ width: '100%', height: '6px', background: '#E2E8F0', borderRadius: '999px', overflow: 'hidden', marginBottom: '1rem' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: isVerified ? '#16A34A' : 'var(--primary)', transition: 'width 0.3s ease' }} />
+                    </div>
+
+                    {/* Checklist Items */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                      {plan.checklist.map((step) => {
+                        const canEdit = isDraft || isRevision
+                        return (
+                          <div
+                            key={step.id}
+                            onClick={() => canEdit && handleToggleChecklist(step.id, step.isCompleted)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '0.75rem',
+                              padding: '0.75rem 1rem',
+                              background: step.isCompleted ? '#F0FDF4' : '#FFFFFF',
+                              border: `1px solid ${step.isCompleted ? '#BBF7D0' : '#E2E8F0'}`,
+                              borderRadius: 'var(--radius-sm)',
+                              cursor: canEdit ? 'pointer' : 'default',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <div style={{ marginTop: '2px', flexShrink: 0 }}>
+                              {step.isCompleted ? (
+                                <CheckSquare size={18} color="#16A34A" />
+                              ) : (
+                                <Square size={18} color="#94A3B8" />
+                              )}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
+                                <span style={{
+                                  fontWeight: 600,
+                                  fontSize: '0.875rem',
+                                  color: step.isCompleted ? '#166534' : 'var(--dark)',
+                                  textDecoration: step.isCompleted ? 'none' : 'none'
+                                }}>
+                                  {step.title}
+                                </span>
+                                {step.isMandatory && (
+                                  <span style={{ fontSize: '0.6875rem', color: '#DC2626', fontWeight: 600, background: '#FEE2E2', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>
+                                    Required
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                                {step.description}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+
               {/* Submission / Next Step Action Bar */}
-              <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                   {isDraft && (
                     <button
@@ -252,16 +399,34 @@ export function RecoveryPlanPage() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   {(isDraft || isRevision) && (
-                    <button
-                      onClick={handleSubmit}
-                      disabled={submitting}
-                      className="btn btn-primary"
-                    >
-                      <ShieldCheck size={16} />
-                      <span>{submitting ? 'Submitting...' : 'Submit for Admin Review'}</span>
-                    </button>
+                    <>
+                      {!plan.isPreparationVerified ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Check all required items to enable review:
+                          </span>
+                          <button
+                            disabled={true}
+                            className="btn btn-secondary"
+                            style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                          >
+                            <Lock size={14} />
+                            <span>Submit for Admin Review</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleSubmit}
+                          disabled={submitting}
+                          className="btn btn-primary"
+                        >
+                          <ShieldCheck size={16} />
+                          <span>{submitting ? 'Submitting...' : 'Submit for Admin Review'}</span>
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

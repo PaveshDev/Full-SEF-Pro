@@ -36,13 +36,15 @@ public static class GeminiHelper
             }
         };
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={apiKey}";
+        var models = new[] { "gemini-flash-lite-latest", "gemini-flash-latest" };
 
         HttpResponseMessage? response = null;
         string error = string.Empty;
 
         for (int attempt = 1; attempt <= 2; attempt++)
         {
+            var modelName = models[Math.Min(attempt - 1, models.Length - 1)];
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent?key={apiKey}";
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(15));
 
@@ -58,10 +60,10 @@ public static class GeminiHelper
                 // Retry on 503 (High demand / unavailable), 429 (Rate limit), or 500+
                 if (statusCode == 503 || statusCode == 429 || statusCode >= 500)
                 {
-                    logger.LogWarning("Gemini API attempt {Attempt} received {Status}. Retrying after delay...", attempt, response.StatusCode);
+                    logger.LogWarning("Gemini API attempt {Attempt} with {Model} received {Status}. Retrying with next model...", attempt, modelName, response.StatusCode);
                     if (attempt < 2)
                     {
-                        await Task.Delay(1000, cancellationToken);
+                        await Task.Delay(500, cancellationToken);
                         continue;
                     }
                 }

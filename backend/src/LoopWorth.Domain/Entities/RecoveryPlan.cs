@@ -7,6 +7,9 @@ public class RecoveryPlan
     public string Suitability { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
     public string RequiredPartnerType { get; set; } = string.Empty;
+    public string? ChecklistJson { get; set; }
+    public bool IsPreparationVerified { get; set; } = false;
+    public string? AdminHandlingInstructions { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public RecoveryRequest RecoveryRequest { get; set; } = null!;

@@ -33,6 +33,9 @@ public class CollectionRequest
     public string? PartnerFeedback { get; set; }
     public DateTime? PartnerConfirmedAt { get; set; }
     public bool? PartnerReceivedConditionOk { get; set; }
+    public bool DeliveryEmailSent { get; set; } = false;
+    public DateTime? DeliveryEmailSentAt { get; set; }
+    public string? DeliveryEmailSubject { get; set; }
 
     public RecoveryRequest RecoveryRequest { get; set; } = null!;
     public Partner Partner { get; set; } = null!;

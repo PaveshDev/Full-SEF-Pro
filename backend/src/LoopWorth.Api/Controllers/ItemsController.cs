@@ -18,12 +18,14 @@ public class ItemsController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IFileStorageService _fileStorage;
     private readonly IItemAssessmentAgent _agent;
+    private readonly IEcoImpactAgent _ecoAgent;
 
-    public ItemsController(AppDbContext context, IFileStorageService fileStorage, IItemAssessmentAgent agent)
+    public ItemsController(AppDbContext context, IFileStorageService fileStorage, IItemAssessmentAgent agent, IEcoImpactAgent ecoAgent)
     {
         _context = context;
         _fileStorage = fileStorage;
         _agent = agent;
+        _ecoAgent = ecoAgent;
     }
 
     private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
@@ -33,6 +35,10 @@ public class ItemsController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto.Name))
             return BadRequest(new { error = "Item name is required." });
+        if (string.IsNullOrWhiteSpace(dto.Brand))
+            return BadRequest(new { error = "Brand is required." });
+        if (string.IsNullOrWhiteSpace(dto.Model))
+            return BadRequest(new { error = "Model is required." });
         if (string.IsNullOrWhiteSpace(dto.ConditionDescription))
             return BadRequest(new { error = "Condition description is required." });
         if (!await _context.Categories.AnyAsync(c => c.Id == dto.CategoryId))
@@ -51,6 +57,18 @@ public class ItemsController : ControllerBase
 
         _context.Items.Add(item);
         await _context.SaveChangesAsync();
+
+        // Run EcoImpact assessment immediately upon item creation
+        try
+        {
+            await _context.Entry(item).Reference(i => i.Category).LoadAsync();
+            var ecoResult = await _ecoAgent.AssessEcoImpactAsync(item);
+            item.EcoHazardReportJson = System.Text.Json.JsonSerializer.Serialize(ecoResult);
+            item.EcoHazardLevel = ecoResult.HazardLevel;
+            item.EcoHazardAcknowledged = !ecoResult.IsHarmfulToEnvironment;
+            await _context.SaveChangesAsync();
+        }
+        catch { }
 
         var result = await GetItemDto(item.Id);
         return CreatedAtAction(nameof(GetById), new { id = item.Id }, result);
@@ -113,6 +131,12 @@ public class ItemsController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(dto.Name))
             return BadRequest(new { error = "Item name is required." });
+        if (string.IsNullOrWhiteSpace(dto.Brand))
+            return BadRequest(new { error = "Brand is required." });
+        if (string.IsNullOrWhiteSpace(dto.Model))
+            return BadRequest(new { error = "Model is required." });
+        if (string.IsNullOrWhiteSpace(dto.ConditionDescription))
+            return BadRequest(new { error = "Condition description is required." });
         if (!await _context.Categories.AnyAsync(c => c.Id == dto.CategoryId))
             return BadRequest(new { error = "Invalid category." });
 
@@ -131,6 +155,17 @@ public class ItemsController : ControllerBase
         {
             _context.ItemAssessments.RemoveRange(priorAssessments);
         }
+
+        // Re-evaluate eco-impact with updated condition description
+        try
+        {
+            await _context.Entry(item).Reference(i => i.Category).LoadAsync();
+            var ecoResult = await _ecoAgent.AssessEcoImpactAsync(item);
+            item.EcoHazardReportJson = System.Text.Json.JsonSerializer.Serialize(ecoResult);
+            item.EcoHazardLevel = ecoResult.HazardLevel;
+            item.EcoHazardAcknowledged = !ecoResult.IsHarmfulToEnvironment;
+        }
+        catch { }
 
         await _context.SaveChangesAsync();
         var updatedDto = await GetItemDto(item.Id);
@@ -238,6 +273,35 @@ public class ItemsController : ControllerBase
         if (item.Status != ItemStatus.Submitted && item.Status != ItemStatus.AssessmentPending && item.Status != ItemStatus.Draft)
             return BadRequest(new { error = "Item must be submitted before assessment." });
 
+        // Environmental Hazard Gate: If harmful, require customer to switch from Donate to Recycle and acknowledge precautions
+        if (!string.IsNullOrEmpty(item.EcoHazardReportJson))
+        {
+            try
+            {
+                var eco = System.Text.Json.JsonSerializer.Deserialize<EcoImpactResult>(item.EcoHazardReportJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (eco != null && eco.IsHarmfulToEnvironment)
+                {
+                    if (item.SelectedRecoveryRoute == RecoveryRoute.Donate)
+                    {
+                        return BadRequest(new { 
+                            error = "Hazardous Item: Based on the reported condition defects and hazard report, this device cannot be donated. Please switch your route to Recycle before running assessment.",
+                            requiresRecycleSwitch = true,
+                            canBeDonated = false
+                        });
+                    }
+
+                    if (!item.EcoHazardAcknowledged)
+                    {
+                        return BadRequest(new { 
+                            error = "Environmental Hazard Alert: This item contains hazardous materials. Please review and acknowledge the environmental precautions before running advisory assessment.",
+                            requiresEcoAcknowledgment = true
+                        });
+                    }
+                }
+            }
+            catch { }
+        }
+
         item.Status = ItemStatus.AssessmentPending;
         await _context.SaveChangesAsync();
 
@@ -299,6 +363,7 @@ public class ItemsController : ControllerBase
                 return UnprocessableEntity(new
                 {
                     isCategoryMismatch = true,
+                    inconsistencyType = result.InconsistencyType ?? (result.MismatchReason?.Contains("Description Inconsistency", StringComparison.OrdinalIgnoreCase) == true ? "DescriptionMismatch" : "CategoryMismatch"),
                     error = result.MismatchReason ?? "The selected category does not match the item details.",
                     detectedCategory = result.DetectedCategory,
                     mismatchReason = result.MismatchReason
@@ -385,16 +450,83 @@ public class ItemsController : ControllerBase
         var item = await _context.Items.FindAsync(id);
         if (item == null) return NotFound();
         if (item.CustomerId != userId) return Forbid();
-        if (item.Status != ItemStatus.Assessed)
-            return BadRequest(new { error = "Item must be assessed before selecting a route." });
 
         if (!Enum.TryParse<RecoveryRoute>(dto.SelectedRoute, true, out var route))
             return BadRequest(new { error = "Invalid recovery route. Must be Donate or Recycle." });
+
+        if (route == RecoveryRoute.Donate)
+        {
+            if (item.Status != ItemStatus.Assessed)
+                return BadRequest(new { error = "Item must be assessed before selecting donation." });
+
+            var hasHazard = item.EcoHazardLevel is "High" or "Critical" or "Moderate" ||
+                            (item.EcoHazardReportJson != null && item.EcoHazardReportJson.Contains("\"IsHarmfulToEnvironment\":true"));
+            if (hasHazard)
+            {
+                return BadRequest(new { error = "This item has hazardous damage/defects reported in its condition description and cannot be accepted for Donation. It must be processed under Recycle." });
+            }
+        }
 
         item.SelectedRecoveryRoute = route;
         item.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return NoContent();
+    }
+
+    [HttpPost("{id}/switch-to-recycle")]
+    public async Task<IActionResult> SwitchToRecycle(Guid id)
+    {
+        var userId = GetUserId();
+        var item = await _context.Items
+            .Include(i => i.Category)
+            .Include(i => i.Images)
+            .FirstOrDefaultAsync(i => i.Id == id);
+        if (item == null) return NotFound();
+        if (item.CustomerId != userId && !User.IsInRole("Admin")) return Forbid();
+
+        item.SelectedRecoveryRoute = RecoveryRoute.Recycle;
+        item.EcoHazardAcknowledged = true;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(MapToDto(item));
+    }
+
+    [HttpPost("{id}/eco-assessment")]
+    public async Task<IActionResult> RunEcoAssessment(Guid id)
+    {
+        var userId = GetUserId();
+        var item = await _context.Items
+            .Include(i => i.Category)
+            .Include(i => i.Images)
+            .FirstOrDefaultAsync(i => i.Id == id);
+
+        if (item == null) return NotFound();
+        if (item.CustomerId != userId && !User.IsInRole("Admin")) return Forbid();
+
+        var ecoResult = await _ecoAgent.AssessEcoImpactAsync(item);
+        item.EcoHazardReportJson = System.Text.Json.JsonSerializer.Serialize(ecoResult);
+        item.EcoHazardLevel = ecoResult.HazardLevel;
+        item.EcoHazardAcknowledged = !ecoResult.IsHarmfulToEnvironment;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(ecoResult);
+    }
+
+    [HttpPost("{id}/eco-acknowledge")]
+    public async Task<IActionResult> AcknowledgeEcoHazard(Guid id)
+    {
+        var userId = GetUserId();
+        var item = await _context.Items.FirstOrDefaultAsync(i => i.Id == id);
+        if (item == null) return NotFound();
+        if (item.CustomerId != userId && !User.IsInRole("Admin")) return Forbid();
+
+        item.EcoHazardAcknowledged = true;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { success = true, ecoHazardAcknowledged = true });
     }
 
     private async Task<ItemDto?> GetItemDto(Guid id)
@@ -406,19 +538,38 @@ public class ItemsController : ControllerBase
         return item == null ? null : MapToDto(item);
     }
 
-    private static ItemDto MapToDto(Item item) => new()
+    private static ItemDto MapToDto(Item item)
     {
-        Id = item.Id,
-        Name = item.Name,
-        CategoryId = item.CategoryId,
-        Category = item.Category != null ? new CategoryDto { Id = item.Category.Id, Code = item.Category.Code, Name = item.Category.Name } : null,
-        Brand = item.Brand,
-        Model = item.Model,
-        ConditionDescription = item.ConditionDescription,
-        Status = item.Status.ToString(),
-        SelectedRecoveryRoute = item.SelectedRecoveryRoute?.ToString(),
-        Images = item.Images.OrderBy(i => i.SortOrder).Select(img => new ItemImageDto { Id = img.Id, ImageUrl = img.ImageUrl, SortOrder = img.SortOrder, IsPrimary = img.IsPrimary }).ToList(),
-        CreatedAt = item.CreatedAt,
-        UpdatedAt = item.UpdatedAt
-    };
+        EcoImpactDto? ecoDto = null;
+        if (!string.IsNullOrEmpty(item.EcoHazardReportJson))
+        {
+            try
+            {
+                ecoDto = System.Text.Json.JsonSerializer.Deserialize<EcoImpactDto>(
+                    item.EcoHazardReportJson,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch { }
+        }
+
+        return new ItemDto
+        {
+            Id = item.Id,
+            Name = item.Name,
+            CategoryId = item.CategoryId,
+            Category = item.Category != null ? new CategoryDto { Id = item.Category.Id, Code = item.Category.Code, Name = item.Category.Name } : null,
+            Brand = item.Brand,
+            Model = item.Model,
+            ConditionDescription = item.ConditionDescription,
+            Status = item.Status.ToString(),
+            SelectedRecoveryRoute = item.SelectedRecoveryRoute?.ToString(),
+            EcoHazardReportJson = item.EcoHazardReportJson,
+            EcoHazardAcknowledged = item.EcoHazardAcknowledged,
+            EcoHazardLevel = item.EcoHazardLevel,
+            EcoAssessment = ecoDto,
+            Images = item.Images.OrderBy(i => i.SortOrder).Select(img => new ItemImageDto { Id = img.Id, ImageUrl = img.ImageUrl, SortOrder = img.SortOrder, IsPrimary = img.IsPrimary }).ToList(),
+            CreatedAt = item.CreatedAt,
+            UpdatedAt = item.UpdatedAt
+        };
+    }
 }

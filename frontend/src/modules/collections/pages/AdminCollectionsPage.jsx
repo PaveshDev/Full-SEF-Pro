@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Truck, AlertCircle, CheckCircle2, Calendar, Clock, Eye, X, Package, Building2, User, Sparkles, AlertTriangle } from 'lucide-react'
+import { Truck, AlertCircle, CheckCircle2, Calendar, Clock, Eye, X, Package, Building2, User, Sparkles, AlertTriangle, Mail } from 'lucide-react'
 import { apiClient } from '../../../shared/services/apiClient.js'
 import { StatusChip } from '../../../shared/components/StatusChip.jsx'
 import { TopBar } from '../../../shared/components/TopBar.jsx'
@@ -9,6 +9,7 @@ export function AdminCollectionsPage() {
   const [selectedCol, setSelectedCol] = useState(null)
   const [loading, setLoading] = useState(true)
   const [assigningId, setAssigningId] = useState(null)
+  const [sendingEmailId, setSendingEmailId] = useState(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -25,6 +26,24 @@ export function AdminCollectionsPage() {
       setError('Failed to load collections queue.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSendDeliveryEmail = async (id) => {
+    try {
+      setSendingEmailId(id)
+      setError('')
+      setSuccess('')
+      const res = await apiClient.post(`/api/admin/collections/${id}/send-delivery-email`)
+      setSuccess(`Delivery email notification successfully generated and dispatched via Brevo!`)
+      await loadData()
+      if (selectedCol && selectedCol.id === id) {
+        setSelectedCol(res.data)
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to dispatch email via Brevo.')
+    } finally {
+      setSendingEmailId(null)
     }
   }
 
@@ -143,9 +162,17 @@ export function AdminCollectionsPage() {
                         </div>
                       )}
                       {c.status === 'Completed' && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <CheckCircle2 size={12} />
-                          <span>Handed over & cycle completed</span>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <CheckCircle2 size={12} />
+                            <span>Handed over & cycle completed</span>
+                          </div>
+                          {c.deliveryEmailSent && (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', marginTop: '0.125rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <Mail size={11} />
+                              <span>Delivery email sent</span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
@@ -323,7 +350,43 @@ export function AdminCollectionsPage() {
                 )}
               </div>
 
+              {/* Brevo Delivery Email Audit Card */}
+              {selectedCol.status === 'Completed' && (
+                <div style={{ marginTop: '1.25rem', padding: '0.875rem', borderRadius: 'var(--radius-sm)', background: 'var(--surface-subtle)', border: '1px solid var(--border-light)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Mail size={16} color="var(--primary)" />
+                      <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>AI Customer Notification (Brevo)</span>
+                    </div>
+                    <span className={`badge ${selectedCol.deliveryEmailSent ? 'badge-success' : 'badge-warning'}`}>
+                      {selectedCol.deliveryEmailSent ? 'Email Dispatched' : 'Pending'}
+                    </span>
+                  </div>
+                  {selectedCol.deliveryEmailSent ? (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      <div><strong>Subject:</strong> {selectedCol.deliveryEmailSubject}</div>
+                      <div style={{ marginTop: '0.2rem' }}><strong>Sent at:</strong> {new Date(selectedCol.deliveryEmailSentAt).toLocaleString()}</div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Automated delivery email has not been triggered yet.
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                {selectedCol.status === 'Completed' && (
+                  <button
+                    onClick={() => handleSendDeliveryEmail(selectedCol.id)}
+                    disabled={sendingEmailId === selectedCol.id}
+                    className="btn btn-secondary"
+                    title="Generate and resend delivery email notification via Brevo"
+                  >
+                    <Mail size={16} />
+                    <span>{sendingEmailId === selectedCol.id ? 'Sending...' : 'Resend Email (Brevo)'}</span>
+                  </button>
+                )}
                 {(selectedCol.status === 'Requested' || selectedCol.status === 'AgentAssigned') && (
                   <button
                     onClick={() => handleAssignAgent(selectedCol.id, Boolean(selectedCol.assignedCollectionAgentId))}

@@ -22,7 +22,11 @@ public class AuthEndpointsTests : IClassFixture<CustomWebApplicationFactory>
         {
             Name = "Amara Dias",
             Email = email,
-            Password = "Password123!"
+            Password = "Password123!",
+            Phone = "0771234567",
+            Address = "12 Main St",
+            District = "Colombo",
+            Town = "Colombo 03"
         };
 
         var response = await _client.PostAsJsonAsync("/api/auth/register", registerDto);
@@ -40,7 +44,7 @@ public class AuthEndpointsTests : IClassFixture<CustomWebApplicationFactory>
     {
         var loginDto = new LoginDto
         {
-            Email = "admin@loopworth.local",
+            Email = "loopworthadmin@gmail.com",
             Password = "WrongPassword!"
         };
 

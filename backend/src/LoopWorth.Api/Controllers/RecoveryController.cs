@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using LoopWorth.Application.DTOs;
 using LoopWorth.Application.Interfaces;
 using LoopWorth.Domain.Entities;
@@ -154,6 +155,9 @@ public class RecoveryController : ControllerBase
             IsApproved = recovery.Status == RecoveryStatus.Approved,
             ApprovedAt = latestDecision?.DecidedAt,
             AdminNote = latestDecision?.Reason,
+            IsPreparationVerified = recovery.Plan?.IsPreparationVerified ?? false,
+            AdminHandlingInstructions = recovery.Plan?.AdminHandlingInstructions,
+            EcoHazardLevel = recovery.Item.EcoHazardLevel,
 
             CollectionRequestId = collection?.Id,
             CollectionStatus = collection?.Status.ToString(),
@@ -237,12 +241,23 @@ public class RecoveryController : ControllerBase
                 .FirstOrDefaultAsync(p => p.RecoveryRequestId == recovery.Id);
             if (oldPlan != null) _context.RecoveryPlans.Remove(oldPlan);
 
+            var defaultChecklist = new List<PreCollectionChecklistItemDto>
+            {
+                new() { Id = "data_wipe", Title = "Data Wipe & Factory Reset", Description = "Erase personal data, browser sessions, and accounts from device.", IsMandatory = true, IsCompleted = false },
+                new() { Id = "account_unlink", Title = "Unlink Cloud & Anti-Theft Lock", Description = "Disable iCloud / Find My / Google FRP lock to ensure device is reusable.", IsMandatory = true, IsCompleted = false },
+                new() { Id = "removable_media", Title = "Remove SIM & Memory Cards", Description = "Eject physical SIM trays, MicroSD cards, and external protective accessories.", IsMandatory = true, IsCompleted = false },
+                new() { Id = "battery_safety", Title = "Battery & Thermal Isolation", Description = "Verify battery is not swollen or leaking; tape exposed cracked terminals.", IsMandatory = true, IsCompleted = false },
+                new() { Id = "packaging", Title = "Secure Protective Packaging", Description = "Place device in a protective padded bubble envelope or snug cardboard box.", IsMandatory = true, IsCompleted = false }
+            };
+
             var plan = new RecoveryPlan
             {
                 RecoveryRequestId = recovery.Id,
                 Suitability = result.Suitability,
                 Summary = result.Summary,
                 RequiredPartnerType = result.RequiredPartnerType,
+                ChecklistJson = JsonSerializer.Serialize(defaultChecklist),
+                IsPreparationVerified = false,
                 Steps = result.PreparationSteps.Select((s, i) => new RecoveryPlanStep
                 {
                     StepText = s, SortOrder = i
@@ -290,17 +305,61 @@ public class RecoveryController : ControllerBase
     public async Task<IActionResult> Submit(Guid id)
     {
         var userId = GetUserId();
-        var recovery = await _context.RecoveryRequests.FindAsync(id);
+        var recovery = await _context.RecoveryRequests
+            .Include(r => r.Plan)
+            .FirstOrDefaultAsync(r => r.Id == id);
         if (recovery == null) return NotFound();
         if (recovery.CustomerId != userId) return Forbid();
         if (recovery.Status != RecoveryStatus.PlanGenerated && recovery.Status != RecoveryStatus.RevisionRequested)
             return BadRequest(new { error = "Recovery must have a plan before submission." });
+
+        if (recovery.Plan != null && !recovery.Plan.IsPreparationVerified)
+        {
+            return BadRequest(new { 
+                error = "Please complete all mandatory pre-collection preparation checklist steps before submitting for admin review.",
+                requiresChecklistCompletion = true 
+            });
+        }
 
         recovery.Status = RecoveryStatus.PendingAdminApproval;
         recovery.SubmittedAt = DateTime.UtcNow;
         recovery.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return NoContent();
+    }
+
+    [HttpPatch("api/recovery/{id}/checklist")]
+    public async Task<IActionResult> ToggleChecklistStep(Guid id, [FromBody] ToggleChecklistDto dto)
+    {
+        var userId = GetUserId();
+        var recovery = await _context.RecoveryRequests
+            .Include(r => r.Plan)
+            .FirstOrDefaultAsync(r => r.Id == id);
+        if (recovery == null) return NotFound();
+        if (recovery.CustomerId != userId && !User.IsInRole("Admin")) return Forbid();
+        if (recovery.Plan == null) return BadRequest(new { error = "Plan does not exist." });
+
+        var checklist = string.IsNullOrEmpty(recovery.Plan.ChecklistJson)
+            ? new List<PreCollectionChecklistItemDto>()
+            : JsonSerializer.Deserialize<List<PreCollectionChecklistItemDto>>(recovery.Plan.ChecklistJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<PreCollectionChecklistItemDto>();
+
+        var item = checklist.FirstOrDefault(c => c.Id == dto.StepId);
+        if (item != null)
+        {
+            item.IsCompleted = dto.IsCompleted;
+            item.CompletedAt = dto.IsCompleted ? DateTime.UtcNow : null;
+        }
+
+        var allMandatoryDone = checklist.Where(c => c.IsMandatory).All(c => c.IsCompleted);
+        recovery.Plan.IsPreparationVerified = allMandatoryDone;
+        recovery.Plan.ChecklistJson = JsonSerializer.Serialize(checklist);
+        recovery.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { 
+            checklist, 
+            isPreparationVerified = allMandatoryDone 
+        });
     }
 
     // ─── Admin endpoints ───
@@ -342,20 +401,20 @@ public class RecoveryController : ControllerBase
             return BadRequest(new { error = "Decision is required (Approved, Rejected, or RevisionRequested)." });
 
         if (decision.Equals("Approved", StringComparison.OrdinalIgnoreCase))
-            return await MakeDecision(id, "Approved", dto?.Reason);
+            return await MakeDecision(id, "Approved", dto?.Reason, dto?.CustomHandlingInstructions, dto?.RouteOverride);
 
         if (decision.Equals("Rejected", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(dto?.Reason))
                 return BadRequest(new { error = "Reason is required for rejection." });
-            return await MakeDecision(id, "Rejected", dto.Reason);
+            return await MakeDecision(id, "Rejected", dto.Reason, dto?.CustomHandlingInstructions, dto?.RouteOverride);
         }
 
         if (decision.Equals("RevisionRequested", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(dto?.Reason))
                 return BadRequest(new { error = "Reason is required for revision request." });
-            return await MakeDecision(id, "RevisionRequested", dto.Reason);
+            return await MakeDecision(id, "RevisionRequested", dto.Reason, dto?.CustomHandlingInstructions, dto?.RouteOverride);
         }
 
         return BadRequest(new { error = "Invalid decision. Must be Approved, Rejected, or RevisionRequested." });
@@ -365,7 +424,7 @@ public class RecoveryController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ApprovalDto? dto = null)
     {
-        return await MakeDecision(id, "Approved", dto?.Reason);
+        return await MakeDecision(id, "Approved", dto?.Reason, dto?.CustomHandlingInstructions, dto?.RouteOverride);
     }
 
     [HttpPost("api/admin/recovery/{id}/reject")]
@@ -374,7 +433,7 @@ public class RecoveryController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto?.Reason))
             return BadRequest(new { error = "Reason is required for rejection." });
-        return await MakeDecision(id, "Rejected", dto.Reason);
+        return await MakeDecision(id, "Rejected", dto.Reason, dto?.CustomHandlingInstructions, dto?.RouteOverride);
     }
 
     [HttpPost("api/admin/recovery/{id}/request-revision")]
@@ -383,23 +442,44 @@ public class RecoveryController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto?.Reason))
             return BadRequest(new { error = "Reason is required for revision request." });
-        return await MakeDecision(id, "RevisionRequested", dto.Reason);
+        return await MakeDecision(id, "RevisionRequested", dto.Reason, dto?.CustomHandlingInstructions, dto?.RouteOverride);
     }
 
-    private async Task<IActionResult> MakeDecision(Guid recoveryId, string decision, string? reason)
+    private async Task<IActionResult> MakeDecision(Guid recoveryId, string decision, string? reason, string? customHandlingInstructions = null, string? routeOverride = null)
     {
         var adminId = GetUserId();
-        var recovery = await _context.RecoveryRequests.FindAsync(recoveryId);
+        var recovery = await _context.RecoveryRequests
+            .Include(r => r.Item)
+            .Include(r => r.Plan)
+            .FirstOrDefaultAsync(r => r.Id == recoveryId);
         if (recovery == null) return NotFound();
         if (recovery.Status != RecoveryStatus.PendingAdminApproval)
             return BadRequest(new { error = "Recovery must be pending admin approval." });
+
+        // Apply Route Override if provided
+        if (!string.IsNullOrWhiteSpace(routeOverride) && Enum.TryParse<RecoveryRoute>(routeOverride, true, out var overriddenRoute))
+        {
+            recovery.SelectedRoute = overriddenRoute;
+            if (recovery.Item != null)
+            {
+                recovery.Item.SelectedRecoveryRoute = overriddenRoute;
+            }
+        }
+
+        // Apply Admin Custom Handling Instructions
+        if (!string.IsNullOrWhiteSpace(customHandlingInstructions) && recovery.Plan != null)
+        {
+            recovery.Plan.AdminHandlingInstructions = customHandlingInstructions;
+        }
 
         var approvalDecision = new ApprovalDecision
         {
             RecoveryRequestId = recoveryId,
             AdminId = adminId,
             Decision = decision,
-            Reason = reason
+            Reason = reason,
+            CustomHandlingInstructions = customHandlingInstructions,
+            OverriddenRoute = routeOverride
         };
         _context.ApprovalDecisions.Add(approvalDecision);
 
@@ -427,6 +507,8 @@ public class RecoveryController : ControllerBase
             AdminId = adminId,
             Decision = decision,
             Reason = reason,
+            CustomHandlingInstructions = customHandlingInstructions,
+            OverriddenRoute = routeOverride,
             DecidedAt = approvalDecision.DecidedAt
         });
     }
@@ -442,41 +524,84 @@ public class RecoveryController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id);
     }
 
-    private static RecoveryRequestDto MapToDto(RecoveryRequest r, Item item) => new()
+    private static RecoveryRequestDto MapToDto(RecoveryRequest r, Item item)
     {
-        Id = r.Id,
-        ItemId = r.ItemId,
-        Item = new ItemDto
+        EcoImpactDto? ecoDto = null;
+        if (!string.IsNullOrEmpty(item.EcoHazardReportJson))
         {
-            Id = item.Id, Name = item.Name, CategoryId = item.CategoryId,
-            Category = item.Category != null ? new CategoryDto { Id = item.Category.Id, Code = item.Category.Code, Name = item.Category.Name } : null,
-            Brand = item.Brand, Model = item.Model, ConditionDescription = item.ConditionDescription,
-            Status = item.Status.ToString(), SelectedRecoveryRoute = item.SelectedRecoveryRoute?.ToString(),
-            Images = item.Images.OrderBy(i => i.SortOrder).Select(i => new ItemImageDto { Id = i.Id, ImageUrl = i.ImageUrl, SortOrder = i.SortOrder, IsPrimary = i.IsPrimary }).ToList()
-        },
-        SelectedRoute = r.SelectedRoute.ToString(),
-        Status = r.Status.ToString(),
-        SubmittedAt = r.SubmittedAt,
-        Plan = r.Plan != null ? new RecoveryPlanDto
-        {
-            Id = r.Plan.Id,
-            Suitability = r.Plan.Suitability,
-            Summary = r.Plan.Summary,
-            RequiredPartnerType = r.Plan.RequiredPartnerType,
-            Steps = r.Plan.Steps.OrderBy(s => s.SortOrder).Select(s => new RecoveryPlanStepDto { StepText = s.StepText, SortOrder = s.SortOrder }).ToList(),
-            SafetyNotes = r.Plan.SafetyNotes.OrderBy(n => n.SortOrder).Select(n => new RecoverySafetyNoteDto { NoteText = n.NoteText, SortOrder = n.SortOrder }).ToList()
-        } : null,
-        ApprovalDecisions = r.ApprovalDecisions
-            .OrderByDescending(d => d.DecidedAt)
-            .Select(d => new ApprovalDecisionDto
+            try
             {
-                Id = d.Id,
-                AdminId = d.AdminId,
-                Decision = d.Decision,
-                Reason = d.Reason,
-                DecidedAt = d.DecidedAt
-            }).ToList(),
-        CreatedAt = r.CreatedAt,
-        UpdatedAt = r.UpdatedAt
-    };
+                ecoDto = JsonSerializer.Deserialize<EcoImpactDto>(
+                    item.EcoHazardReportJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch { }
+        }
+
+        List<PreCollectionChecklistItemDto> checklist = new();
+        if (r.Plan != null && !string.IsNullOrEmpty(r.Plan.ChecklistJson))
+        {
+            try
+            {
+                checklist = JsonSerializer.Deserialize<List<PreCollectionChecklistItemDto>>(
+                    r.Plan.ChecklistJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            }
+            catch { }
+        }
+
+        return new RecoveryRequestDto
+        {
+            Id = r.Id,
+            ItemId = r.ItemId,
+            Item = new ItemDto
+            {
+                Id = item.Id, Name = item.Name, CategoryId = item.CategoryId,
+                Category = item.Category != null ? new CategoryDto { Id = item.Category.Id, Code = item.Category.Code, Name = item.Category.Name } : null,
+                Brand = item.Brand, Model = item.Model, ConditionDescription = item.ConditionDescription,
+                Status = item.Status.ToString(), SelectedRecoveryRoute = item.SelectedRecoveryRoute?.ToString(),
+                EcoHazardReportJson = item.EcoHazardReportJson,
+                EcoHazardAcknowledged = item.EcoHazardAcknowledged,
+                EcoHazardLevel = item.EcoHazardLevel,
+                EcoAssessment = ecoDto,
+                Images = item.Images.OrderBy(i => i.SortOrder).Select(i => new ItemImageDto { Id = i.Id, ImageUrl = i.ImageUrl, SortOrder = i.SortOrder, IsPrimary = i.IsPrimary }).ToList()
+            },
+            SelectedRoute = r.SelectedRoute.ToString(),
+            Status = r.Status.ToString(),
+            SubmittedAt = r.SubmittedAt,
+            Plan = r.Plan != null ? new RecoveryPlanDto
+            {
+                Id = r.Plan.Id,
+                Suitability = r.Plan.Suitability,
+                Summary = r.Plan.Summary,
+                RequiredPartnerType = r.Plan.RequiredPartnerType,
+                ChecklistJson = r.Plan.ChecklistJson,
+                IsPreparationVerified = r.Plan.IsPreparationVerified,
+                AdminHandlingInstructions = r.Plan.AdminHandlingInstructions,
+                Checklist = checklist,
+                Steps = r.Plan.Steps.OrderBy(s => s.SortOrder).Select(s => new RecoveryPlanStepDto { StepText = s.StepText, SortOrder = s.SortOrder }).ToList(),
+                SafetyNotes = r.Plan.SafetyNotes.OrderBy(n => n.SortOrder).Select(n => new RecoverySafetyNoteDto { NoteText = n.NoteText, SortOrder = n.SortOrder }).ToList()
+            } : null,
+            ApprovalDecisions = r.ApprovalDecisions
+                .OrderByDescending(d => d.DecidedAt)
+                .Select(d => new ApprovalDecisionDto
+                {
+                    Id = d.Id,
+                    AdminId = d.AdminId,
+                    Decision = d.Decision,
+                    Reason = d.Reason,
+                    CustomHandlingInstructions = d.CustomHandlingInstructions,
+                    OverriddenRoute = d.OverriddenRoute,
+                    DecidedAt = d.DecidedAt
+                }).ToList(),
+            CreatedAt = r.CreatedAt,
+            UpdatedAt = r.UpdatedAt
+        };
+    }
+}
+
+public class ToggleChecklistDto
+{
+    public string StepId { get; set; } = string.Empty;
+    public bool IsCompleted { get; set; }
 }

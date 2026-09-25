@@ -98,12 +98,12 @@ export function LoginPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <button
                 type="button"
-                onClick={() => handleQuickLogin('admin@loopworth.local', 'Admin123!')}
+                onClick={() => handleQuickLogin('loopworthadmin@gmail.com', 'Admin123!')}
                 className="btn btn-secondary btn-sm"
                 style={{ justifyContent: 'space-between' }}
               >
                 <span>Admin Portal</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>admin@loopworth.local</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>loopworthadmin@gmail.com</span>
               </button>
             </div>
           </div>

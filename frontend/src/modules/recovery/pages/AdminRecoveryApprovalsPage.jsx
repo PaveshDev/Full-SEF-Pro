@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ShieldCheck, Check, X, RotateCcw, AlertCircle, CheckCircle2, Eye, Lock, Clock } from 'lucide-react'
+import { ShieldCheck, Check, X, RotateCcw, AlertCircle, CheckCircle2, Eye, Lock, Clock, AlertTriangle, Leaf, CheckSquare, Square } from 'lucide-react'
 import { apiClient } from '../../../shared/services/apiClient.js'
 import { StatusChip } from '../../../shared/components/StatusChip.jsx'
 import { TopBar } from '../../../shared/components/TopBar.jsx'
@@ -9,6 +9,7 @@ export function AdminRecoveryApprovalsPage() {
   const [selectedRecovery, setSelectedRecovery] = useState(null)
   const [decision, setDecision] = useState('')
   const [reason, setReason] = useState('')
+  const [customHandling, setCustomHandling] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -30,6 +31,13 @@ export function AdminRecoveryApprovalsPage() {
     }
   }
 
+  const handleSelectRecovery = (rec) => {
+    setSelectedRecovery(rec)
+    setDecision('Approved')
+    setReason('')
+    setCustomHandling(rec.plan?.adminHandlingInstructions || '')
+  }
+
   const handleDecision = async () => {
     if (!decision) return
     if ((decision === 'Rejected' || decision === 'RevisionRequested') && !reason.trim()) {
@@ -42,12 +50,14 @@ export function AdminRecoveryApprovalsPage() {
     try {
       await apiClient.post(`/api/admin/recovery/${selectedRecovery.id}/decision`, {
         decision,
-        reason: reason || null
+        reason: reason || null,
+        customHandlingInstructions: customHandling.trim() || null
       })
       setSuccess(`Recovery plan ${decision} successfully.`)
       setSelectedRecovery(null)
       setDecision('')
       setReason('')
+      setCustomHandling('')
       await loadRecoveries()
     } catch (err) {
       console.error('Failed to submit decision:', err)
@@ -133,7 +143,7 @@ export function AdminRecoveryApprovalsPage() {
                       </td>
                       <td>
                         <button
-                          onClick={() => { setSelectedRecovery(rec); setDecision(''); setReason(''); }}
+                          onClick={() => handleSelectRecovery(rec)}
                           className="btn btn-primary btn-sm"
                         >
                           <Eye size={14} />
@@ -168,8 +178,83 @@ export function AdminRecoveryApprovalsPage() {
 
                   <div style={{ background: 'var(--surface-subtle)', padding: '0.875rem', borderRadius: 'var(--radius-sm)', marginBottom: '1rem', fontSize: '0.875rem' }}>
                     <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Customer Condition Report</div>
-                    <p style={{ color: 'var(--text-main)' }}>{selectedRecovery.item?.conditionDescription}</p>
+                    <p style={{ color: 'var(--text-main)', margin: 0 }}>{selectedRecovery.item?.conditionDescription}</p>
                   </div>
+
+                  {/* Feature 1: Environmental Hazard & Eco Audit Report */}
+                  {selectedRecovery.item?.ecoAssessment && (() => {
+                    const eco = selectedRecovery.item.ecoAssessment
+                    const isHarmful = eco.isHarmfulToEnvironment
+                    const acknowledged = selectedRecovery.item.ecoHazardAcknowledged
+
+                    return (
+                      <div style={{
+                        background: isHarmful ? '#FEF2F2' : '#F0FDF4',
+                        border: `1px solid ${isHarmful ? '#FECACA' : '#BBF7D0'}`,
+                        borderLeft: `4px solid ${isHarmful ? '#DC2626' : '#16A34A'}`,
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '0.875rem 1rem',
+                        marginBottom: '1rem'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.8125rem', color: isHarmful ? '#991B1B' : '#166534' }}>
+                            {isHarmful ? <AlertTriangle size={15} color="#DC2626" /> : <Leaf size={15} color="#16A34A" />}
+                            <span>Feature 1 Eco-Hazard Audit ({eco.hazardLevel?.toUpperCase()} HAZARD)</span>
+                          </div>
+                          <span style={{ fontSize: '0.75rem', color: isHarmful ? (acknowledged ? '#15803D' : '#B91C1C') : '#15803D', fontWeight: 600 }}>
+                            {isHarmful ? (acknowledged ? '✓ Customer Acknowledged' : '⚠️ Unacknowledged') : '✓ Safe Device'}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.8125rem', color: isHarmful ? '#7F1D1D' : '#166534', lineHeight: 1.4 }}>
+                          {eco.environmentalAlert}
+                        </p>
+                        {eco.detectedHazards && eco.detectedHazards.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.5rem' }}>
+                            {eco.detectedHazards.map((h, i) => (
+                              <span key={i} style={{ background: '#FFFFFF', border: '1px solid #FECACA', color: '#B91C1C', fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '3px', fontWeight: 500 }}>
+                                ⚠️ {h}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Feature 2: Pre-Collection Readiness Checklist Status */}
+                  {selectedRecovery.plan?.checklist && selectedRecovery.plan.checklist.length > 0 && (() => {
+                    const total = selectedRecovery.plan.checklist.length
+                    const done = selectedRecovery.plan.checklist.filter(c => c.isCompleted).length
+                    const isVerified = selectedRecovery.plan.isPreparationVerified
+
+                    return (
+                      <div style={{
+                        background: isVerified ? '#F0FDF4' : '#FFFBEB',
+                        border: `1px solid ${isVerified ? '#BBF7D0' : '#FDE68A'}`,
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '0.875rem 1rem',
+                        marginBottom: '1rem'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: isVerified ? '#166534' : '#92400E', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <CheckSquare size={15} color={isVerified ? '#16A34A' : '#D97706'} />
+                            <span>Feature 2 Preparation Checklist ({done}/{total} Done)</span>
+                          </div>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isVerified ? '#15803D' : '#B45309' }}>
+                            {isVerified ? '✓ 100% Verified' : 'Pending Completion'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          {selectedRecovery.plan.checklist.map((step) => (
+                            <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: step.isCompleted ? '#15803D' : '#94A3B8' }}>
+                              {step.isCompleted ? <Check size={12} color="#16A34A" /> : <Square size={12} color="#CBD5E1" />}
+                              <span>{step.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {selectedRecovery.plan && (
                     <div style={{ marginBottom: '1.25rem' }}>
@@ -283,6 +368,40 @@ export function AdminRecoveryApprovalsPage() {
                             <X size={14} />
                             <span>Reject</span>
                           </button>
+                        </div>
+
+                        {/* Customer Confirmed Route (Read-Only) */}
+                        <div style={{ marginBottom: '1rem', background: 'var(--surface-subtle)', padding: '0.75rem 0.875rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                            Confirmed Recovery Route:
+                          </span>
+                          <span style={{
+                            fontWeight: 700,
+                            fontSize: '0.8125rem',
+                            color: selectedRecovery.selectedRoute === 'Donate' ? '#16A34A' : '#D97706',
+                            background: selectedRecovery.selectedRoute === 'Donate' ? '#DCFCE7' : '#FEF3C7',
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '4px',
+                            border: `1px solid ${selectedRecovery.selectedRoute === 'Donate' ? '#86EFAC' : '#FDE68A'}`
+                          }}>
+                            {selectedRecovery.selectedRoute}
+                          </span>
+                        </div>
+
+                        {/* Feature 5: Custom Handling & Safety Instructions */}
+                        <div className="form-group" style={{ marginBottom: '1rem' }}>
+                          <label className="form-label" style={{ fontSize: '0.8125rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <ShieldCheck size={14} color="var(--primary)" />
+                            <span>Special Handling & Courier Directives (Optional)</span>
+                          </label>
+                          <textarea
+                            rows={2}
+                            className="form-textarea"
+                            placeholder="e.g., Handle with insulated anti-static gloves; place in fire-resistant battery pouch; dispatch to specialized lithium recycler."
+                            value={customHandling}
+                            onChange={(e) => setCustomHandling(e.target.value)}
+                            style={{ fontSize: '0.8125rem' }}
+                          />
                         </div>
 
                         <div className="form-group">

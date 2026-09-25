@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useLocation, useSearchParams } from 'react-router'
 import { Truck, CheckCircle2, AlertCircle, Calendar, Clock, MapPin, Package, ArrowRight, X, AlertTriangle, Phone, User, QrCode, ShieldCheck } from 'lucide-react'
 import { apiClient } from '../../../shared/services/apiClient.js'
 import { StatusChip } from '../../../shared/components/StatusChip.jsx'
@@ -6,6 +7,11 @@ import { TopBar } from '../../../shared/components/TopBar.jsx'
 import { QrScannerModal } from '../../../shared/components/QrScannerModal.jsx'
 
 export function CollectionAgentJobsPage() {
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const targetJobId = location.state?.selectedJobId || searchParams.get('jobId')
+  const targetRecoveryId = location.state?.recoveryRequestId || searchParams.get('recoveryId')
+
   const [jobs, setJobs] = useState([])
   const [selectedJob, setSelectedJob] = useState(null)
   const [targetJobForScan, setTargetJobForScan] = useState(null)
@@ -23,11 +29,38 @@ export function CollectionAgentJobsPage() {
     loadJobs()
   }, [])
 
-  const loadJobs = async () => {
+  useEffect(() => {
+    if (selectedJob?.id) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`job-${selectedJob.id}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [selectedJob?.id])
+
+  const loadJobs = async (targetIdOverride) => {
     try {
       setLoading(true)
       const res = await apiClient.get('/api/agent/collections')
       setJobs(res.data)
+
+      const activeTargetId = targetIdOverride || targetJobId || targetRecoveryId
+      if (activeTargetId) {
+        const matched = res.data.find(j => 
+          j.id === activeTargetId || 
+          j.recoveryRequestId === activeTargetId
+        )
+        if (matched) {
+          setSelectedJob(matched)
+          if (matched.status === 'Collected') {
+            setStatusUpdate('DeliveredToPartner')
+            setNote(`Handed over item to ${matched.partnerName}.`)
+          }
+        }
+      }
     } catch {
       setError('Failed to load assigned jobs.')
     } finally {
@@ -166,10 +199,13 @@ export function CollectionAgentJobsPage() {
               {jobs.map((job) => (
                 <div
                   key={job.id}
+                  id={`job-${job.id}`}
                   className="card"
                   style={{
                     background: selectedJob?.id === job.id ? 'var(--primary-light)' : undefined,
-                    borderColor: selectedJob?.id === job.id ? 'var(--primary)' : undefined
+                    borderColor: selectedJob?.id === job.id ? 'var(--primary)' : undefined,
+                    boxShadow: selectedJob?.id === job.id ? '0 0 0 2px var(--primary)' : undefined,
+                    transition: 'all 0.25s ease'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
@@ -179,7 +215,14 @@ export function CollectionAgentJobsPage() {
                         Category: {job.item?.category?.name} • Target Partner: <strong>{job.partnerName}</strong>
                       </div>
                     </div>
-                    <StatusChip status={job.status} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {selectedJob?.id === job.id && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', background: '#ECFDF5', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #A7F3D0' }}>
+                          Marked Job
+                        </span>
+                      )}
+                      <StatusChip status={job.status} />
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>

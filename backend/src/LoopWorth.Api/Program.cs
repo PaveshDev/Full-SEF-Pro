@@ -9,6 +9,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
+// Load .env file if present
+Program.LoadDotEnvFiles();
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Controllers
@@ -45,7 +48,9 @@ builder.Services.AddProblemDetails();
 
 // Database
 var rawConnectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+    ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("CONNECTION_STRING")
+    ?? builder.Configuration["CONNECTION_STRING"];
 
 string? connectionString = null;
 if (!string.IsNullOrWhiteSpace(rawConnectionString) && !rawConnectionString.Contains("<NEON_HOST>"))
@@ -107,10 +112,13 @@ builder.Services.AddAuthentication(options =>
 // DI: Services
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+builder.Services.AddScoped<IEcoImpactAgent, EcoImpactAgent>();
 builder.Services.AddScoped<IItemAssessmentAgent, ItemAssessmentAgent>();
 builder.Services.AddScoped<IRecoveryPlanningAgent, RecoveryPlanningAgent>();
 builder.Services.AddScoped<IPartnerMatchingAgent, PartnerMatchingAgent>();
 builder.Services.AddScoped<ICollectionPlanningAgent, CollectionPlanningAgent>();
+builder.Services.AddScoped<IEmailService, BrevoEmailService>();
+builder.Services.AddScoped<IDeliveryNotificationAgent, DeliveryNotificationAgent>();
 
 // CORS
 builder.Services.AddCors(options =>
@@ -182,8 +190,43 @@ public partial class Program
             var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
             var port = uri.Port > 0 ? uri.Port : 5432;
             var database = uri.AbsolutePath.TrimStart('/');
-            return $"Host={uri.Host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true;Keepalive=30";
+            return $"Host={uri.Host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true;Keepalive=30;Pooling=true;Minimum Pool Size=2;Maximum Pool Size=20;";
         }
         return raw;
+    }
+
+    public static void LoadDotEnvFiles()
+    {
+        var candidates = new[]
+        {
+            Directory.GetCurrentDirectory(),
+            AppContext.BaseDirectory,
+            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..")),
+            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", ".."))
+        };
+
+        foreach (var dir in candidates)
+        {
+            var envFile = Path.Combine(dir, ".env");
+            if (File.Exists(envFile))
+            {
+                foreach (var rawLine in File.ReadAllLines(envFile))
+                {
+                    var line = rawLine.Trim();
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
+                    var parts = line.Split('=', 2);
+                    if (parts.Length == 2)
+                    {
+                        var key = parts[0].Trim();
+                        var val = parts[1].Trim();
+                        if (Environment.GetEnvironmentVariable(key) == null)
+                        {
+                            Environment.SetEnvironmentVariable(key, val);
+                        }
+                    }
+                }
+                break;
+            }
+        }
     }
 }

@@ -100,4 +100,29 @@ public class ItemTests
         Assert.True(result.IsCategoryMatch);
         Assert.Null(result.MismatchReason);
     }
+
+    [Fact]
+    public async Task ItemAssessmentAgent_FlagsDescriptionMismatch_WhenPhoneHasLaptopDescription()
+    {
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<LoopWorth.Infrastructure.Agents.ItemAssessmentAgent>.Instance;
+        var agent = new LoopWorth.Infrastructure.Agents.ItemAssessmentAgent(new HttpClient(), configuration, logger);
+
+        var item = new Item
+        {
+            Name = "Iphone 13 pro max",
+            Brand = "Apple",
+            Model = "Iphone 13 pro max",
+            Category = new Category { Name = "Phone" },
+            ConditionDescription = "This ASUS Zenbook 14 OLED is being offered strictly for parts or repair. The laptop requires chassis overhaul."
+        };
+
+        var result = await agent.AssessItemAsync(item);
+
+        Assert.False(result.IsCategoryMatch);
+        Assert.Equal("Phone", result.DetectedCategory);
+        Assert.Equal("DescriptionMismatch", result.InconsistencyType);
+        Assert.Contains("Description Inconsistency", result.MismatchReason);
+        Assert.Contains("edit the item's condition description", result.MismatchReason, StringComparison.OrdinalIgnoreCase);
+    }
 }

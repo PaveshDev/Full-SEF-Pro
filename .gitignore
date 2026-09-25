@@ -53,3 +53,5 @@ upload-data/
 # Local secrets and development configuration
 **/appsettings.json
 **/appsettings.Development.json
+scratch/
+

@@ -15,7 +15,8 @@ import {
   Check,
   Building2,
   Lock,
-  ArrowLeft
+  ArrowLeft,
+  ArrowRight
 } from 'lucide-react'
 import { apiClient } from '../../../shared/services/apiClient.js'
 import { useAuth } from '../../../shared/context/AuthContext.jsx'
@@ -34,6 +35,17 @@ export function HandoverVerificationPage() {
   const [success, setSuccess] = useState('')
   const [agentNote, setAgentNote] = useState('Inspected and collected on-site via Digital Handover Pass verification.')
   const [inspectionChecks, setInspectionChecks] = useState({})
+
+  const handleBackToRoute = () => {
+    const jobId = pass?.collectionRequestId
+    const recoveryId = pass?.recoveryRequestId || id
+    navigate(`/agent/jobs${jobId ? `?jobId=${jobId}` : ''}`, {
+      state: {
+        selectedJobId: jobId,
+        recoveryRequestId: recoveryId
+      }
+    })
+  }
 
   useEffect(() => {
     loadPassData()
@@ -172,11 +184,16 @@ export function HandoverVerificationPage() {
       <TopBar
         title="Handover Verification"
         action={
-          user?.role === 'CollectionAgent' ? (
-            <Link to="/agent/collections" className="btn btn-secondary btn-sm">
+          user?.role === 'CollectionAgent' || user?.role === 'Admin' ? (
+            <button
+              onClick={handleBackToRoute}
+              className="btn btn-secondary btn-sm"
+              type="button"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
+            >
               <ArrowLeft size={16} />
               <span>Back to Route</span>
-            </Link>
+            </button>
           ) : null
         }
       />
@@ -191,9 +208,22 @@ export function HandoverVerificationPage() {
         )}
 
         {success && (
-          <div className="alert alert-success" style={{ marginBottom: '1.25rem' }}>
-            <CheckCircle2 size={18} />
-            <span>{success}</span>
+          <div className="alert alert-success" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <CheckCircle2 size={18} />
+              <span>{success}</span>
+            </div>
+            {(user?.role === 'CollectionAgent' || user?.role === 'Admin') && (
+              <button
+                onClick={handleBackToRoute}
+                className="btn btn-primary btn-sm"
+                type="button"
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8125rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
+              >
+                <span>Continue Route &amp; Hand Over</span>
+                <ArrowRight size={14} />
+              </button>
+            )}
           </div>
         )}
 

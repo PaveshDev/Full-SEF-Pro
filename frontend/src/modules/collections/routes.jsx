@@ -46,5 +46,13 @@ export const collectionsRoutes = [
         <CollectionAgentJobsPage />
       </ProtectedRoute>
     )
+  },
+  {
+    path: '/agent/collections',
+    element: (
+      <ProtectedRoute allowedRoles={['CollectionAgent']}>
+        <CollectionAgentJobsPage />
+      </ProtectedRoute>
+    )
   }
 ]

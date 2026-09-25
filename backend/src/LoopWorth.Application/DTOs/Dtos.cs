@@ -100,9 +100,29 @@ public class ItemDto
     public string ConditionDescription { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string? SelectedRecoveryRoute { get; set; }
+    public string? EcoHazardReportJson { get; set; }
+    public bool EcoHazardAcknowledged { get; set; }
+    public string? EcoHazardLevel { get; set; }
+    public EcoImpactDto? EcoAssessment { get; set; }
     public List<ItemImageDto> Images { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+public class EcoImpactDto
+{
+    public bool IsHarmfulToEnvironment { get; set; }
+    public string HazardLevel { get; set; } = "Low";
+    public List<string> DetectedHazards { get; set; } = new();
+    public string EnvironmentalAlert { get; set; } = string.Empty;
+    public List<string> HandlingPrecautions { get; set; } = new();
+    public decimal EstimatedCo2OffsetKg { get; set; }
+    public decimal EstimatedEwasteGrams { get; set; }
+    public bool IsEcoFriendly { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public bool CanBeDonated { get; set; } = true;
+    public string? DonationUnsuitabilityReason { get; set; }
+    public string? MandatoryRoute { get; set; }
 }
 
 public class ItemImageDto
@@ -145,12 +165,26 @@ public class RecoveryRequestDto
     public DateTime UpdatedAt { get; set; }
 }
 
+public class PreCollectionChecklistItemDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public bool IsMandatory { get; set; } = true;
+    public bool IsCompleted { get; set; }
+    public DateTime? CompletedAt { get; set; }
+}
+
 public class RecoveryPlanDto
 {
     public Guid Id { get; set; }
     public string Suitability { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
     public string RequiredPartnerType { get; set; } = string.Empty;
+    public string? ChecklistJson { get; set; }
+    public bool IsPreparationVerified { get; set; }
+    public string? AdminHandlingInstructions { get; set; }
+    public List<PreCollectionChecklistItemDto> Checklist { get; set; } = new();
     public List<RecoveryPlanStepDto> Steps { get; set; } = new();
     public List<RecoverySafetyNoteDto> SafetyNotes { get; set; } = new();
 }
@@ -171,6 +205,8 @@ public class ApprovalDto
 {
     public string Decision { get; set; } = string.Empty; // Approved, Rejected, RevisionRequested
     public string? Reason { get; set; }
+    public string? CustomHandlingInstructions { get; set; }
+    public string? RouteOverride { get; set; } // "Donate" or "Recycle"
 }
 
 public class ApprovalDecisionDto
@@ -179,6 +215,8 @@ public class ApprovalDecisionDto
     public string AdminId { get; set; } = string.Empty;
     public string Decision { get; set; } = string.Empty;
     public string? Reason { get; set; }
+    public string? CustomHandlingInstructions { get; set; }
+    public string? OverriddenRoute { get; set; }
     public DateTime DecidedAt { get; set; }
 }
 
@@ -213,6 +251,9 @@ public class HandoverPassDto
     public bool IsApproved { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public string? AdminNote { get; set; }
+    public bool IsPreparationVerified { get; set; }
+    public string? AdminHandlingInstructions { get; set; }
+    public string? EcoHazardLevel { get; set; }
 
     // Collection Details (if initiated)
     public Guid? CollectionRequestId { get; set; }
@@ -344,6 +385,9 @@ public class CollectionRequestDto
     public string? PartnerFeedback { get; set; }
     public DateTime? PartnerConfirmedAt { get; set; }
     public bool? PartnerReceivedConditionOk { get; set; }
+    public bool DeliveryEmailSent { get; set; }
+    public DateTime? DeliveryEmailSentAt { get; set; }
+    public string? DeliveryEmailSubject { get; set; }
     public ItemDto? Item { get; set; }
     public List<CollectionStatusHistoryDto> StatusHistory { get; set; } = new();
     public DateTime CreatedAt { get; set; }
