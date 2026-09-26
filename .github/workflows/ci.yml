@@ -27,6 +27,8 @@ jobs:
 
     - name: Run Tests
       run: dotnet test backend/LoopWorth.sln --no-build --verbosity normal
+      env:
+        JWT_SECRET: LoopWorthCiTestJwtSecretKeyMustBeAtLeast32CharsLong!
 
   frontend-build-lint:
     name: Frontend Build & Lint (React 19 / Vite)

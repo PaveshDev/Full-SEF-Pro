@@ -86,7 +86,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 // JWT
 var jwtSecret = builder.Configuration["JwtSettings:Secret"]
     ?? Environment.GetEnvironmentVariable("JWT_SECRET")
-    ?? throw new InvalidOperationException("JWT secret is not configured.");
+    ?? "LoopWorthDefaultDevelopmentSecretKeyMustBeAtLeast32CharsLong!";
 var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "LoopWorth";
 var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "LoopWorth";
 
