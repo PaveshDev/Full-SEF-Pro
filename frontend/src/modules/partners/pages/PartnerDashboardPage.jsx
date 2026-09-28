@@ -86,13 +86,17 @@ export function PartnerDashboardPage() {
     e.preventDefault()
     if (!inspectingItem) return
     setModalError('')
+
+    if (!photoFile) {
+      setModalError('Please upload an intake verification photo before confirming receipt.')
+      return
+    }
+
     setSubmitting(true)
 
     try {
       const formData = new FormData()
-      if (photoFile) {
-        formData.append('photo', photoFile)
-      }
+      formData.append('photo', photoFile)
       formData.append('feedback', feedback || '')
       formData.append('conditionOk', conditionOk.toString())
 

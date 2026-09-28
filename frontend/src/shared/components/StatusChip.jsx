@@ -28,7 +28,9 @@ export function StatusChip({ status, type = 'status' }) {
   let displayLabel = status
   if (s === 'agentassigned') displayLabel = 'Agent Assigned'
   else if (s === 'collected') displayLabel = 'Item Picked Up'
-  else if (s === 'deliveredtopartner') displayLabel = 'Handed Over to Partner'
+  else if (s === 'deliveredtopartner' || s === 'handed over to partner' || s === 'handedovertopartner') {
+    displayLabel = 'Waiting for Partner Review & Confirmation'
+  }
   else if (s === 'partnerreceived') displayLabel = 'Partner Received'
   else if (s === 'completed') displayLabel = 'Completed'
 

@@ -93,26 +93,100 @@ public class RecoveryController : ControllerBase
     }
 
     // GET /api/recovery/{id}/handover-pass
-    [HttpGet("api/recovery/{id:guid}/handover-pass")]
+    [HttpGet("api/recovery/{id}/handover-pass")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetHandoverPass(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetHandoverPass(string id, CancellationToken ct)
     {
-        var recovery = await _context.RecoveryRequests
-            .Include(r => r.Item).ThenInclude(i => i.Category)
-            .Include(r => r.Item).ThenInclude(i => i.Images)
-            .Include(r => r.Plan).ThenInclude(p => p!.Steps)
-            .Include(r => r.Plan).ThenInclude(p => p!.SafetyNotes)
-            .Include(r => r.ApprovalDecisions)
-            .FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (string.IsNullOrWhiteSpace(id))
+            return BadRequest(new { error = "Pass code or ID is required." });
 
-        if (recovery == null) return NotFound(new { error = "Recovery request not found." });
+        string cleaned = id.Trim();
+        if (cleaned.Contains("verify-handover/"))
+        {
+            cleaned = cleaned.Split("verify-handover/").Last();
+        }
+        if (cleaned.Contains('?'))
+        {
+            cleaned = cleaned.Split('?').First();
+        }
+        if (cleaned.Contains('#'))
+        {
+            cleaned = cleaned.Split('#').First();
+        }
+        cleaned = cleaned.Trim('/').Trim();
+
+        RecoveryRequest? recovery = null;
+
+        // 1. Try parsing as GUID (could be RecoveryRequestId or CollectionRequestId)
+        if (Guid.TryParse(cleaned, out var guid))
+        {
+            recovery = await _context.RecoveryRequests
+                .Include(r => r.Item).ThenInclude(i => i.Category)
+                .Include(r => r.Item).ThenInclude(i => i.Images)
+                .Include(r => r.Plan).ThenInclude(p => p!.Steps)
+                .Include(r => r.Plan).ThenInclude(p => p!.SafetyNotes)
+                .Include(r => r.ApprovalDecisions)
+                .FirstOrDefaultAsync(r => r.Id == guid, ct);
+
+            if (recovery == null)
+            {
+                var col = await _context.CollectionRequests
+                    .FirstOrDefaultAsync(c => c.Id == guid, ct);
+                if (col != null)
+                {
+                    recovery = await _context.RecoveryRequests
+                        .Include(r => r.Item).ThenInclude(i => i.Category)
+                        .Include(r => r.Item).ThenInclude(i => i.Images)
+                        .Include(r => r.Plan).ThenInclude(p => p!.Steps)
+                        .Include(r => r.Plan).ThenInclude(p => p!.SafetyNotes)
+                        .Include(r => r.ApprovalDecisions)
+                        .FirstOrDefaultAsync(r => r.Id == col.RecoveryRequestId, ct);
+                }
+            }
+        }
+
+        // 2. If not found by full GUID, search by PassReferenceCode or short prefix
+        if (recovery == null)
+        {
+            string shortCode = cleaned;
+            if (shortCode.StartsWith("LPW-PASS-", StringComparison.OrdinalIgnoreCase))
+            {
+                shortCode = shortCode.Substring("LPW-PASS-".Length);
+            }
+            shortCode = shortCode.ToLowerInvariant();
+
+            var recoveries = await _context.RecoveryRequests
+                .Include(r => r.Item).ThenInclude(i => i.Category)
+                .Include(r => r.Item).ThenInclude(i => i.Images)
+                .Include(r => r.Plan).ThenInclude(p => p!.Steps)
+                .Include(r => r.Plan).ThenInclude(p => p!.SafetyNotes)
+                .Include(r => r.ApprovalDecisions)
+                .ToListAsync(ct);
+
+            recovery = recoveries.FirstOrDefault(r => 
+                r.Id.ToString().ToLowerInvariant().StartsWith(shortCode) ||
+                $"LPW-PASS-{r.Id.ToString()[..8].ToUpper()}".Equals(cleaned, StringComparison.OrdinalIgnoreCase));
+
+            if (recovery == null)
+            {
+                var collections = await _context.CollectionRequests.ToListAsync(ct);
+                var matchedCol = collections.FirstOrDefault(c => 
+                    c.Id.ToString().ToLowerInvariant().StartsWith(shortCode));
+                if (matchedCol != null)
+                {
+                    recovery = recoveries.FirstOrDefault(r => r.Id == matchedCol.RecoveryRequestId);
+                }
+            }
+        }
+
+        if (recovery == null) return NotFound(new { error = "Recovery request or handover pass not found." });
 
         var customer = await _userManager.FindByIdAsync(recovery.CustomerId);
 
         // Fetch associated collection request if one exists
         var collection = await _context.CollectionRequests
             .Include(c => c.Partner)
-            .FirstOrDefaultAsync(c => c.RecoveryRequestId == id, ct);
+            .FirstOrDefaultAsync(c => c.RecoveryRequestId == recovery.Id, ct);
 
         string? assignedAgentName = null;
         if (!string.IsNullOrEmpty(collection?.AssignedCollectionAgentId))

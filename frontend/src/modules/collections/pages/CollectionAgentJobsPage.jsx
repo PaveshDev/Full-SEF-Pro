@@ -311,11 +311,17 @@ export function CollectionAgentJobsPage() {
                       )}
                       {job.status === 'Scheduled' && (
                         <button
-                          onClick={() => { setSelectedJob(job); setRejectingId(null); setStatusUpdate('Collected'); setNote('Item collected from customer.'); }}
+                          onClick={() => {
+                            setSelectedJob(job)
+                            setRejectingId(null)
+                            setTargetJobForScan(job)
+                            setShowScanner(true)
+                          }}
                           className="btn btn-primary btn-sm"
+                          title="Scan customer's QR pass to verify and mark picked up"
                         >
-                          <Package size={14} />
-                          <span>Mark Picked Up</span>
+                          <QrCode size={14} />
+                          <span>Scan QR &amp; Pick Up</span>
                         </button>
                       )}
                       {job.status === 'Collected' && (

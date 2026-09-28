@@ -73,9 +73,9 @@ export function CustomerCollectionsPage() {
                   </div>
                 )}
                 {col.status === 'DeliveredToPartner' && (
-                  <div className="alert alert-success" style={{ marginBottom: '1.25rem' }}>
+                  <div className="alert alert-info" style={{ marginBottom: '1.25rem' }}>
                     <CheckCircle2 size={18} />
-                    <span>Item has been handed over to {col.partnerName}.</span>
+                    <span>Item has been handed over to {col.partnerName}. Waiting for partner review and confirmation.</span>
                   </div>
                 )}
                 {col.status === 'Completed' && (

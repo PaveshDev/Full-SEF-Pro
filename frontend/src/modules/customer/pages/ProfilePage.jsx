@@ -72,18 +72,29 @@ export function ProfilePage() {
     loadProfile()
   }, [user])
 
+  const isAdmin = user?.role === 'Admin'
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setSuccess('')
 
     if (!formData.name.trim()) {
-      setError('Please provide your full name.')
+      setError(isAdmin ? 'Please provide the administrator name.' : 'Please provide your full name.')
       return
     }
 
     if (!formData.phone.trim()) {
-      setError('Please provide a contact phone number for collection agents.')
+      setError(isAdmin ? 'Please provide an official contact phone number.' : 'Please provide a contact phone number for collection agents.')
+      return
+    }
+
+    let cleanPhone = formData.phone.trim().replace(/[\s\-()]/g, '')
+    if (cleanPhone.startsWith('+94')) {
+      cleanPhone = '0' + cleanPhone.slice(3)
+    }
+    if (!/^[0-9]{10}$/.test(cleanPhone)) {
+      setError('Please provide a valid 10-digit phone number (e.g. 0771234567).')
       return
     }
 
@@ -93,12 +104,12 @@ export function ProfilePage() {
     }
 
     if (!formData.town.trim()) {
-      setError('Please provide your town or area.')
+      setError(isAdmin ? 'Please provide your office city or area.' : 'Please provide your town or area.')
       return
     }
 
     if (!formData.address.trim()) {
-      setError('Please provide your street address.')
+      setError(isAdmin ? 'Please provide your office / headquarters address.' : 'Please provide your street address.')
       return
     }
 
@@ -106,12 +117,12 @@ export function ProfilePage() {
       setSubmitting(true)
       await updateProfile({
         name: formData.name.trim(),
-        phone: formData.phone.trim(),
+        phone: cleanPhone,
         district: formData.district,
         town: formData.town.trim(),
         address: formData.address.trim()
       })
-      setSuccess('Your profile and pickup details have been updated successfully.')
+      setSuccess(isAdmin ? 'Admin profile and contact details have been updated successfully.' : 'Your profile and pickup details have been updated successfully.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to update profile. Please try again.')
@@ -130,14 +141,16 @@ export function ProfilePage() {
 
   return (
     <>
-      <TopBar title="My Profile" />
+      <TopBar title={isAdmin ? 'Admin Profile' : 'My Profile'} />
 
       <div className="content-container" style={{ maxWidth: '840px' }}>
         <div className="page-header">
           <div className="page-title-group">
-            <h1>Account &amp; Pickup Details</h1>
+            <h1>{isAdmin ? 'Administrator Profile & Contact Details' : 'Account & Pickup Details'}</h1>
             <div className="page-subtitle">
-              Manage your personal information and default pickup address used for collection agent dispatch
+              {isAdmin
+                ? 'Manage your administrative credentials, official contact phone number, and headquarters location'
+                : 'Manage your personal information and default pickup address used for collection agent dispatch'}
             </div>
           </div>
         </div>
@@ -157,16 +170,18 @@ export function ProfilePage() {
         )}
 
         <form onSubmit={handleSubmit}>
-          {/* Personal Information */}
+          {/* Personal / Admin Information */}
           <div className="card" style={{ marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
               <User size={20} color="var(--primary)" />
-              <h3 style={{ fontSize: '1.0625rem', margin: 0 }}>Personal Information</h3>
+              <h3 style={{ fontSize: '1.0625rem', margin: 0 }}>
+                {isAdmin ? 'Administrator Information' : 'Personal Information'}
+              </h3>
             </div>
 
             <div className="grid-2">
               <div className="form-group">
-                <label className="form-label">Full Name *</label>
+                <label className="form-label">{isAdmin ? 'Administrator Name *' : 'Full Name *'}</label>
                 <div style={{ position: 'relative' }}>
                   <User size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input
@@ -176,7 +191,7 @@ export function ProfilePage() {
                     style={{ paddingLeft: '2.25rem' }}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Kasun Jayasuriya"
+                    placeholder={isAdmin ? 'System Admin' : 'e.g. Kasun Jayasuriya'}
                   />
                 </div>
               </div>
@@ -207,19 +222,23 @@ export function ProfilePage() {
             </div>
           </div>
 
-          {/* Contact & Doorstep Pickup Address */}
+          {/* Contact & Office / Doorstep Address */}
           <div className="card" style={{ marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
               <MapPin size={20} color="var(--primary)" />
-              <h3 style={{ fontSize: '1.0625rem', margin: 0 }}>Doorstep Pickup &amp; Contact Information</h3>
+              <h3 style={{ fontSize: '1.0625rem', margin: 0 }}>
+                {isAdmin ? 'Administrative Office & Contact Information' : 'Doorstep Pickup & Contact Information'}
+              </h3>
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginBottom: '1.25rem' }}>
-              These details are essential for our collection agents. Whenever an agent is assigned to collect your disused electronic items, they will use this address and phone number for navigation and pickup coordination.
+              {isAdmin
+                ? 'These details represent your official administrative office and direct contact phone for platform management and system communications.'
+                : 'These details are essential for our collection agents. Whenever an agent is assigned to collect your disused electronic items, they will use this address and phone number for navigation and pickup coordination.'}
             </p>
 
             <div className="grid-2">
               <div className="form-group">
-                <label className="form-label">Contact Phone Number *</label>
+                <label className="form-label">{isAdmin ? 'Official Phone Number *' : 'Contact Phone Number *'}</label>
                 <div style={{ position: 'relative' }}>
                   <Phone size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input
@@ -229,16 +248,18 @@ export function ProfilePage() {
                     style={{ paddingLeft: '2.25rem' }}
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+94 77 123 4567"
+                    placeholder={isAdmin ? '0757809030' : '+94 77 123 4567'}
                   />
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                  Used by the collection agent for calling before doorstep arrival.
+                  {isAdmin
+                    ? 'Primary administrative phone line for urgent notifications and platform coordination.'
+                    : 'Used by the collection agent for calling before doorstep arrival.'}
                 </div>
               </div>
 
               <div className="form-group">
-                <label className="form-label">District (Sri Lanka) *</label>
+                <label className="form-label">{isAdmin ? 'Operating District (Sri Lanka) *' : 'District (Sri Lanka) *'}</label>
                 <div style={{ position: 'relative' }}>
                   <Building size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
                   <select
@@ -259,7 +280,7 @@ export function ProfilePage() {
 
             <div className="grid-2">
               <div className="form-group">
-                <label className="form-label">Town / City / Area *</label>
+                <label className="form-label">{isAdmin ? 'City / Town Area *' : 'Town / City / Area *'}</label>
                 <div style={{ position: 'relative' }}>
                   <MapPin size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input
@@ -269,13 +290,13 @@ export function ProfilePage() {
                     style={{ paddingLeft: '2.25rem' }}
                     value={formData.town}
                     onChange={(e) => setFormData({ ...formData, town: e.target.value })}
-                    placeholder="e.g. Nugegoda, Kollupitiya, Dehiwala"
+                    placeholder={isAdmin ? 'e.g. Colombo 03' : 'e.g. Nugegoda, Kollupitiya, Dehiwala'}
                   />
                 </div>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Street Address &amp; Landmark *</label>
+                <label className="form-label">{isAdmin ? 'Office / Headquarters Address *' : 'Street Address & Landmark *'}</label>
                 <div style={{ position: 'relative' }}>
                   <Home size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input
@@ -285,47 +306,86 @@ export function ProfilePage() {
                     style={{ paddingLeft: '2.25rem' }}
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="e.g. No. 45, Baseline Road"
+                    placeholder={isAdmin ? 'e.g. No. 45/2, Galle Road' : 'e.g. No. 45, Baseline Road'}
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Live Agent Preview Card */}
-          <div className="card" style={{ marginBottom: '1.5rem', background: '#F8FAF9', border: '1px dashed var(--primary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>
-              <Eye size={18} />
-              <h4 style={{ fontSize: '0.9375rem', margin: 0, fontWeight: 600 }}>Live Agent View Preview</h4>
-            </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '0.875rem' }}>
-              This is how your contact and location details will be displayed to collection agents on their job dispatch card:
-            </p>
+          {/* Preview / Summary Card */}
+          {isAdmin ? (
+            <div className="card" style={{ marginBottom: '1.5rem', background: '#F8FAF9', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>
+                <Shield size={18} />
+                <h4 style={{ fontSize: '0.9375rem', margin: 0, fontWeight: 600 }}>Administrator Profile Summary</h4>
+              </div>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '0.875rem' }}>
+                Official platform administrator credentials and operational office registered on LoopWorth:
+              </p>
 
-            <div style={{ background: 'var(--surface)', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text-main)' }}>
-                    {formData.name || 'Customer Name'}
+              <div style={{ background: 'var(--surface)', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span>{formData.name || 'System Admin'}</span>
+                      <span style={{ fontSize: '0.6875rem', padding: '0.125rem 0.5rem', background: 'var(--primary)', color: '#fff', borderRadius: 'var(--radius-full)', fontWeight: 600 }}>
+                        Super Admin
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                      Office Base: <strong>{formData.town || 'Colombo 03'}</strong>, {formData.district || 'Colombo'}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                    Pickup Location: <strong>{formData.town || 'Town'}</strong>, {formData.district || 'District'}
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.625rem', background: 'var(--surface-subtle)', borderRadius: 'var(--radius-full)', fontSize: '0.8125rem', color: 'var(--primary)', fontWeight: 500 }}>
+                    <Phone size={14} />
+                    <span>{formData.phone || '0757809030'}</span>
                   </div>
                 </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.625rem', background: 'var(--surface-subtle)', borderRadius: 'var(--radius-full)', fontSize: '0.8125rem', color: 'var(--primary)', fontWeight: 500 }}>
-                  <Phone size={14} />
-                  <span>{formData.phone || '+94 XX XXX XXXX'}</span>
+
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.375rem', borderTop: '1px solid var(--border)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+                  <MapPin size={14} color="var(--primary)" />
+                  <span>
+                    {formData.address ? `${formData.address}, ${formData.town}, ${formData.district}` : 'No office address provided yet'}
+                  </span>
                 </div>
               </div>
+            </div>
+          ) : (
+            <div className="card" style={{ marginBottom: '1.5rem', background: '#F8FAF9', border: '1px dashed var(--primary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>
+                <Eye size={18} />
+                <h4 style={{ fontSize: '0.9375rem', margin: 0, fontWeight: 600 }}>Live Agent View Preview</h4>
+              </div>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '0.875rem' }}>
+                This is how your contact and location details will be displayed to collection agents on their job dispatch card:
+              </p>
 
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                <MapPin size={14} color="var(--primary)" />
-                <span>
-                  {formData.address ? `${formData.address}, ${formData.town}, ${formData.district}` : 'No street address provided yet'}
-                </span>
+              <div style={{ background: 'var(--surface)', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text-main)' }}>
+                      {formData.name || 'Customer Name'}
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                      Pickup Location: <strong>{formData.town || 'Town'}</strong>, {formData.district || 'District'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.625rem', background: 'var(--surface-subtle)', borderRadius: 'var(--radius-full)', fontSize: '0.8125rem', color: 'var(--primary)', fontWeight: 500 }}>
+                    <Phone size={14} />
+                    <span>{formData.phone || '+94 XX XXX XXXX'}</span>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                  <MapPin size={14} color="var(--primary)" />
+                  <span>
+                    {formData.address ? `${formData.address}, ${formData.town}, ${formData.district}` : 'No street address provided yet'}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button

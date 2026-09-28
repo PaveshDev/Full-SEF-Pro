@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using LoopWorth.Application.DTOs;
 using LoopWorth.Domain.Entities;
 using LoopWorth.Domain.Enums;
@@ -117,12 +118,39 @@ public class CollectionAgentsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCollectionAgentDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password))
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            return BadRequest(new { error = "Agent Name is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(new { error = "Email address is required." });
+
+        if (!Regex.IsMatch(dto.Email.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            return BadRequest(new { error = "Please provide a valid email address." });
+
+        if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 8 ||
+            !dto.Password.Any(char.IsUpper) || !dto.Password.Any(char.IsDigit))
         {
-            return BadRequest(new { error = "Name, Email, and Password are required." });
+            return BadRequest(new { error = "Password must be at least 8 characters long, containing at least one uppercase letter and numbers." });
         }
 
-        var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+        if (string.IsNullOrWhiteSpace(dto.Phone))
+            return BadRequest(new { error = "Phone number is required." });
+
+        var cleanPhone = Regex.Replace(dto.Phone.Trim(), @"[\s\-()]", "");
+        if (cleanPhone.StartsWith("+94"))
+        {
+            cleanPhone = "0" + cleanPhone.Substring(3);
+        }
+        if (!Regex.IsMatch(cleanPhone, @"^[0-9]{10}$"))
+            return BadRequest(new { error = "Phone number must be exactly 10 digits (e.g. 0771234567)." });
+
+        if (string.IsNullOrWhiteSpace(dto.ServiceArea))
+            return BadRequest(new { error = "Service Territory / District is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.TownArea))
+            return BadRequest(new { error = "Town Area / Vicinity is required." });
+
+        var existingUser = await _userManager.FindByEmailAsync(dto.Email.Trim());
         if (existingUser != null)
         {
             return Conflict(new { error = "A user with this email already exists." });
@@ -130,10 +158,10 @@ public class CollectionAgentsController : ControllerBase
 
         var user = new ApplicationUser
         {
-            UserName = dto.Email,
-            Email = dto.Email,
-            FullName = dto.Name,
-            PhoneNumber = dto.Phone,
+            UserName = dto.Email.Trim(),
+            Email = dto.Email.Trim(),
+            FullName = dto.Name.Trim(),
+            PhoneNumber = cleanPhone,
             EmailConfirmed = true
         };
 
@@ -148,9 +176,9 @@ public class CollectionAgentsController : ControllerBase
         var profile = new CollectionAgentProfile
         {
             UserId = user.Id,
-            Phone = dto.Phone,
-            ServiceArea = dto.ServiceArea,
-            TownArea = dto.TownArea,
+            Phone = cleanPhone,
+            ServiceArea = dto.ServiceArea.Trim(),
+            TownArea = dto.TownArea.Trim(),
             IsAvailable = true,
             IsActive = true
         };
@@ -178,6 +206,23 @@ public class CollectionAgentsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCollectionAgentDto dto)
     {
+        if (string.IsNullOrWhiteSpace(dto.Phone))
+            return BadRequest(new { error = "Phone number is required." });
+
+        var cleanPhone = Regex.Replace(dto.Phone.Trim(), @"[\s\-()]", "");
+        if (cleanPhone.StartsWith("+94"))
+        {
+            cleanPhone = "0" + cleanPhone.Substring(3);
+        }
+        if (!Regex.IsMatch(cleanPhone, @"^[0-9]{10}$"))
+            return BadRequest(new { error = "Phone number must be exactly 10 digits (e.g. 0771234567)." });
+
+        if (string.IsNullOrWhiteSpace(dto.ServiceArea))
+            return BadRequest(new { error = "Service Territory / District is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.TownArea))
+            return BadRequest(new { error = "Town Area / Vicinity is required." });
+
         var profile = await _context.CollectionAgentProfiles.FindAsync(id);
         if (profile == null) return NotFound(new { error = "Collection agent profile not found." });
 
@@ -185,9 +230,9 @@ public class CollectionAgentsController : ControllerBase
         var hasActiveJobs = await _context.CollectionRequests
             .AnyAsync(c => c.AssignedCollectionAgentId == profile.UserId && inProgressStatuses.Contains(c.Status));
 
-        profile.Phone = dto.Phone;
-        profile.ServiceArea = dto.ServiceArea;
-        profile.TownArea = dto.TownArea ?? profile.TownArea;
+        profile.Phone = cleanPhone;
+        profile.ServiceArea = dto.ServiceArea.Trim();
+        profile.TownArea = dto.TownArea.Trim();
         // Automated availability based on active collection jobs: Busy when on active pickup, Available when idle
         profile.IsAvailable = !hasActiveJobs;
         profile.IsActive = dto.IsActive;

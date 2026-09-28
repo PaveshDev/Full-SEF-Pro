@@ -58,11 +58,11 @@ public static class DbInitializer
                     logger.LogWarning("Clean slate database purge triggered! Purging all items, requests, partners, agents and non-admin users...");
                     await context.Database.ExecuteSqlRawAsync(@"
                         TRUNCATE TABLE ""CollectionStatusHistories"", ""CollectionRequests"", ""CollectionAgentProfiles"", ""PartnerSelections"", ""PartnerMatches"", ""PartnerServices"", ""Partners"", ""ApprovalDecisions"", ""RecoverySafetyNotes"", ""RecoveryPlanSteps"", ""RecoveryPlans"", ""RecoveryRequests"", ""ItemAssessments"", ""ItemImages"", ""AgentWorkflowSteps"", ""AgentWorkflows"", ""Items"" CASCADE;
-                        DELETE FROM ""AspNetUserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" != 'ADMIN@LOOPWORTH.LOCAL');
-                        DELETE FROM ""AspNetUserClaims"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" != 'ADMIN@LOOPWORTH.LOCAL');
-                        DELETE FROM ""AspNetUserLogins"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" != 'ADMIN@LOOPWORTH.LOCAL');
-                        DELETE FROM ""AspNetUserTokens"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" != 'ADMIN@LOOPWORTH.LOCAL');
-                        DELETE FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" != 'ADMIN@LOOPWORTH.LOCAL';
+                        DELETE FROM ""AspNetUserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" NOT IN ('LOOPWORTHADMIN@GMAIL.COM', 'ADMIN@LOOPWORTH.LOCAL'));
+                        DELETE FROM ""AspNetUserClaims"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" NOT IN ('LOOPWORTHADMIN@GMAIL.COM', 'ADMIN@LOOPWORTH.LOCAL'));
+                        DELETE FROM ""AspNetUserLogins"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" NOT IN ('LOOPWORTHADMIN@GMAIL.COM', 'ADMIN@LOOPWORTH.LOCAL'));
+                        DELETE FROM ""AspNetUserTokens"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" NOT IN ('LOOPWORTHADMIN@GMAIL.COM', 'ADMIN@LOOPWORTH.LOCAL'));
+                        DELETE FROM ""AspNetUsers"" WHERE ""NormalizedEmail"" NOT IN ('LOOPWORTHADMIN@GMAIL.COM', 'ADMIN@LOOPWORTH.LOCAL');
                     ");
 
                     if (File.Exists(triggerFile1))
@@ -124,6 +124,11 @@ public static class DbInitializer
                 targetAdmin.UserName = adminEmail;
                 targetAdmin.NormalizedUserName = userManager.NormalizeName(adminEmail);
                 targetAdmin.EmailConfirmed = true;
+                targetAdmin.PhoneNumber = "0757809030";
+                targetAdmin.PhoneNumberConfirmed = true;
+                targetAdmin.Address = "No. 45/2, Galle Road";
+                targetAdmin.District = "Colombo";
+                targetAdmin.Town = "Colombo 03";
                 await userManager.UpdateAsync(targetAdmin);
 
                 var token = await userManager.GeneratePasswordResetTokenAsync(targetAdmin);
@@ -137,6 +142,11 @@ public static class DbInitializer
                     UserName = adminEmail,
                     Email = adminEmail,
                     FullName = "System Admin",
+                    PhoneNumber = "0757809030",
+                    PhoneNumberConfirmed = true,
+                    Address = "No. 45/2, Galle Road",
+                    District = "Colombo",
+                    Town = "Colombo 03",
                     EmailConfirmed = true
                 };
                 var result = await userManager.CreateAsync(targetAdmin, adminPassword);
@@ -158,6 +168,11 @@ public static class DbInitializer
             targetAdmin.NormalizedUserName = userManager.NormalizeName(adminEmail);
             targetAdmin.NormalizedEmail = userManager.NormalizeEmail(adminEmail);
             targetAdmin.EmailConfirmed = true;
+            targetAdmin.PhoneNumber = "0757809030";
+            targetAdmin.PhoneNumberConfirmed = true;
+            targetAdmin.Address = "No. 45/2, Galle Road";
+            targetAdmin.District = "Colombo";
+            targetAdmin.Town = "Colombo 03";
             await userManager.UpdateAsync(targetAdmin);
 
             if (!await userManager.IsInRoleAsync(targetAdmin, "Admin"))

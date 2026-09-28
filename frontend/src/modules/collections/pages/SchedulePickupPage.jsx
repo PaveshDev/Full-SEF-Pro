@@ -53,8 +53,24 @@ export function SchedulePickupPage() {
 
   const handleSchedule = async (e) => {
     e.preventDefault()
-    setSubmitting(true)
     setError('')
+
+    if (!preferredDate) {
+      setError('Please select your preferred pickup date.')
+      return
+    }
+
+    if (!startTime || !endTime) {
+      setError('Please select both window start and end times.')
+      return
+    }
+
+    if (startTime >= endTime) {
+      setError('Preferred start time must be earlier than end time.')
+      return
+    }
+
+    setSubmitting(true)
     try {
       const res = await apiClient.post(`/api/recovery/${id}/collections`, {
         preferredPickupDate: new Date(preferredDate).toISOString(),

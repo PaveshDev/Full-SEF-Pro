@@ -107,6 +107,26 @@ export function AdminPartnersPage() {
     setError('')
     setModalError('')
 
+    if (!name.trim()) {
+      setModalError('Organization Name is required.')
+      return
+    }
+
+    if (!contactName.trim()) {
+      setModalError('Contact Person is required.')
+      return
+    }
+
+    if (!email.trim()) {
+      setModalError('Official Email is required.')
+      return
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setModalError('Please enter a valid official email address.')
+      return
+    }
+
     if (!editingPartner) {
       if (!password || password.length < 8) {
         setModalError('Password must be at least 8 characters long.')
@@ -122,6 +142,30 @@ export function AdminPartnersPage() {
       }
     }
 
+    if (!phone.trim()) {
+      setModalError('Phone number is required.')
+      return
+    }
+
+    let cleanPhone = phone.trim().replace(/[\s\-()]/g, '')
+    if (cleanPhone.startsWith('+94')) {
+      cleanPhone = '0' + cleanPhone.slice(3)
+    }
+    if (!/^[0-9]{10}$/.test(cleanPhone)) {
+      setModalError('Phone number must be exactly 10 digits (e.g. 0771234567).')
+      return
+    }
+
+    if (!serviceArea.trim()) {
+      setModalError('Service Area / District is required.')
+      return
+    }
+
+    if (!operatingHours.trim()) {
+      setModalError('Operating Hours are required.')
+      return
+    }
+
     if (!selectedServices || selectedServices.length === 0) {
       setModalError('Please select at least one accepted route and category. Partners cannot operate without accepted services.')
       return
@@ -129,12 +173,12 @@ export function AdminPartnersPage() {
 
     try {
       const payload = {
-        name,
-        contactName,
-        email,
-        phone: phone || null,
-        serviceArea,
-        operatingHours: operatingHours || null,
+        name: name.trim(),
+        contactName: contactName.trim(),
+        email: email.trim(),
+        phone: cleanPhone,
+        serviceArea: serviceArea.trim(),
+        operatingHours: operatingHours.trim(),
         services: selectedServices
       }
 
@@ -396,10 +440,11 @@ export function AdminPartnersPage() {
 
                   <div className="grid-2">
                     <div className="form-group">
-                      <label className="form-label">Phone Number</label>
+                      <label className="form-label">Phone Number *</label>
                       <input
-                        type="text"
-                        placeholder="e.g. +94112345678"
+                        type="tel"
+                        required
+                        placeholder="e.g. 0771234567 or +94771234567"
                         className="form-input"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
@@ -419,9 +464,10 @@ export function AdminPartnersPage() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Operating Hours</label>
+                    <label className="form-label">Operating Hours *</label>
                     <input
                       type="text"
+                      required
                       className="form-input"
                       placeholder="e.g. Mon-Fri 8:30-17:30"
                       value={operatingHours}

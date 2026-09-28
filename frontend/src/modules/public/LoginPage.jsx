@@ -14,6 +14,17 @@ export function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address.')
+      return
+    }
+
+    if (!password) {
+      setError('Password is required.')
+      return
+    }
+
     setLoading(true)
     try {
       const user = await login(email, password)

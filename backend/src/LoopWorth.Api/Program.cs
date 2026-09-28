@@ -124,7 +124,7 @@ builder.Services.AddScoped<IDeliveryNotificationAgent, DeliveryNotificationAgent
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DevelopmentClients", policy =>
-        policy.WithOrigins("http://localhost:5173", "http://localhost:5174")
+        policy.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost" || new Uri(origin).Host == "127.0.0.1")
             .AllowAnyHeader()
             .AllowAnyMethod());
 });

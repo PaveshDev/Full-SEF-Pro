@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Text.RegularExpressions;
 using LoopWorth.Application.DTOs;
 using LoopWorth.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authorization;
@@ -31,6 +32,9 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password) || string.IsNullOrWhiteSpace(dto.Name))
             return BadRequest(new { error = "Name, email, and password are required." });
 
+        if (!Regex.IsMatch(dto.Email.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            return BadRequest(new { error = "Please provide a valid email address." });
+
         if (dto.Password.Length < 8 || !dto.Password.Any(char.IsUpper) || !dto.Password.Any(char.IsDigit))
         {
             return BadRequest(new { error = "Password must be at least 8 characters long and contain at least one uppercase letter (A-Z) and one number (0-9)." });
@@ -42,16 +46,26 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = "Phone number, address, district, and town are required for collection logistics." });
         }
 
-        var existing = await _userManager.FindByEmailAsync(dto.Email);
+        var cleanPhone = Regex.Replace(dto.Phone.Trim(), @"[\s\-()]", "");
+        if (cleanPhone.StartsWith("+94"))
+        {
+            cleanPhone = "0" + cleanPhone.Substring(3);
+        }
+        if (!Regex.IsMatch(cleanPhone, @"^[0-9]{10}$"))
+        {
+            return BadRequest(new { error = "Phone number must be exactly 10 digits (e.g. 0771234567)." });
+        }
+
+        var existing = await _userManager.FindByEmailAsync(dto.Email.Trim());
         if (existing != null)
             return Conflict(new { error = "An account with this email already exists." });
 
         var user = new ApplicationUser
         {
-            UserName = dto.Email,
-            Email = dto.Email,
-            FullName = dto.Name,
-            PhoneNumber = dto.Phone.Trim(),
+            UserName = dto.Email.Trim(),
+            Email = dto.Email.Trim(),
+            FullName = dto.Name.Trim(),
+            PhoneNumber = cleanPhone,
             Address = dto.Address.Trim(),
             District = dto.District.Trim(),
             Town = dto.Town.Trim(),
@@ -154,7 +168,16 @@ public class AuthController : ControllerBase
 
         if (dto.Phone != null)
         {
-            user.PhoneNumber = dto.Phone.Trim();
+            var cleanPhone = Regex.Replace(dto.Phone.Trim(), @"[\s\-()]", "");
+            if (cleanPhone.StartsWith("+94"))
+            {
+                cleanPhone = "0" + cleanPhone.Substring(3);
+            }
+            if (!string.IsNullOrWhiteSpace(cleanPhone) && !Regex.IsMatch(cleanPhone, @"^[0-9]{10}$"))
+            {
+                return BadRequest(new { error = "Phone number must be exactly 10 digits (e.g. 0771234567)." });
+            }
+            user.PhoneNumber = cleanPhone;
         }
 
         if (dto.Address != null)

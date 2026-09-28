@@ -18,6 +18,7 @@ export function AdminCollectionAgentsPage() {
   const [phone, setPhone] = useState('')
   const [serviceArea, setServiceArea] = useState('')
   const [townArea, setTownArea] = useState('')
+  const [modalError, setModalError] = useState('')
 
   useEffect(() => {
     loadAgents()
@@ -43,6 +44,7 @@ export function AdminCollectionAgentsPage() {
     setPhone('')
     setServiceArea('')
     setTownArea('')
+    setModalError('')
     setShowModal(true)
   }
 
@@ -53,36 +55,79 @@ export function AdminCollectionAgentsPage() {
     setPhone(a.phone || '')
     setServiceArea(a.serviceArea)
     setTownArea(a.townArea || '')
+    setModalError('')
     setShowModal(true)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setModalError('')
+
+    if (!editingAgent) {
+      if (!name.trim()) {
+        setModalError('Full name is required.')
+        return
+      }
+      if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setModalError('Please enter a valid email address.')
+        return
+      }
+      if (!password || password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+        setModalError('Password must be at least 8 characters long, containing at least one uppercase letter and numbers.')
+        return
+      }
+    }
+
+    if (!phone.trim()) {
+      setModalError('Phone number is required.')
+      return
+    }
+
+    let cleanPhone = phone.trim().replace(/[\s\-()]/g, '')
+    if (cleanPhone.startsWith('+94')) {
+      cleanPhone = '0' + cleanPhone.slice(3)
+    }
+    if (!/^[0-9]{10}$/.test(cleanPhone)) {
+      setModalError('Phone number must be exactly 10 digits (e.g. 0771234567).')
+      return
+    }
+
+    if (!serviceArea.trim()) {
+      setModalError('Service Territory / District is required.')
+      return
+    }
+
+    if (!townArea.trim()) {
+      setModalError('Town Area / Vicinity is required.')
+      return
+    }
+
     try {
       if (editingAgent) {
         await apiClient.put(`/api/admin/collection-agents/${editingAgent.profileId}`, {
-          phone: phone || null,
-          serviceArea,
-          townArea: townArea || null,
+          phone: cleanPhone,
+          serviceArea: serviceArea.trim(),
+          townArea: townArea.trim(),
           isActive: editingAgent.isActive
         })
         setSuccess('Agent profile updated successfully.')
       } else {
         await apiClient.post('/api/admin/collection-agents', {
-          name,
-          email,
+          name: name.trim(),
+          email: email.trim(),
           password,
-          phone: phone || null,
-          serviceArea,
-          townArea: townArea || null
+          phone: cleanPhone,
+          serviceArea: serviceArea.trim(),
+          townArea: townArea.trim()
         })
         setSuccess('Collection agent registered successfully.')
       }
       setShowModal(false)
       await loadAgents()
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save collection agent.')
+      const msg = err.response?.data?.error || 'Failed to save collection agent.'
+      setModalError(msg)
     }
   }
 
@@ -206,6 +251,13 @@ export function AdminCollectionAgentsPage() {
                 </button>
               </div>
 
+              {modalError && (
+                <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                  <AlertCircle size={16} />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit}>
                 {!editingAgent && (
                   <>
@@ -232,11 +284,11 @@ export function AdminCollectionAgentsPage() {
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Password *</label>
+                      <label className="form-label">Password * (Min 8 chars, 1 uppercase, 1 digit)</label>
                       <input
                         type="password"
                         required
-                        minLength={6}
+                        minLength={8}
                         className="form-input"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -246,11 +298,12 @@ export function AdminCollectionAgentsPage() {
                 )}
 
                 <div className="form-group">
-                  <label className="form-label">Phone</label>
+                  <label className="form-label">Phone Number *</label>
                   <input
-                    type="text"
+                    type="tel"
+                    required
                     className="form-input"
-                    placeholder="e.g. +94 77 123 4567"
+                    placeholder="e.g. 0771234567 or +94 77 123 4567"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                   />

@@ -62,11 +62,14 @@ export function RegisterPage() {
     }
 
     // Phone
-    const cleanPhone = (fields.phone || '').replace(/[\s-]/g, '')
+    let cleanPhone = (fields.phone || '').replace(/[\s\-()]/g, '')
+    if (cleanPhone.startsWith('+94')) {
+      cleanPhone = '0' + cleanPhone.slice(3)
+    }
     if (!cleanPhone) {
       errors.phone = 'Phone number is required.'
-    } else if (!/^(?:\+94|0)?[0-9]{9,10}$/.test(cleanPhone)) {
-      errors.phone = 'Please enter a valid phone number (e.g. 0771234567 or +94771234567).'
+    } else if (!/^[0-9]{10}$/.test(cleanPhone)) {
+      errors.phone = 'Phone number must be exactly 10 digits (e.g. 0771234567).'
     }
 
     // Password

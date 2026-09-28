@@ -1,9 +1,10 @@
+import 'app_config.dart';
+
 class ApiConstants {
-  // When using USB debugging with `adb reverse tcp:5080 tcp:5080`,
-  // the phone communicates with the host machine via localhost:5080.
-  // For standard Android Emulator without adb reverse, use 10.0.2.2:5080.
-  static const String baseUrl = 'http://localhost:5080/api';
-  static const String serverUrl = 'http://localhost:5080';
+  // Uses build-time environment variable if supplied (e.g. --dart-define=API_BASE_URL=http://192.168.132.26:5080),
+  // otherwise defaults to http://localhost:5080.
+  static const String serverUrl = AppConfig.apiBaseUrl;
+  static String get baseUrl => '$serverUrl/api';
 
   static String resolveImageUrl(String? path) {
     if (path == null || path.isEmpty) return '';

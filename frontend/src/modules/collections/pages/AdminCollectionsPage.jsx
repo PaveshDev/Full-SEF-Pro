@@ -157,8 +157,8 @@ export function AdminCollectionsPage() {
                         </div>
                       )}
                       {c.status === 'DeliveredToPartner' && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                          Item has been handed over to the respective partner
+                        <div style={{ fontSize: '0.75rem', color: 'var(--primary)', marginTop: '0.25rem', fontWeight: 500 }}>
+                          Item handed over • Waiting for partner review & confirmation
                         </div>
                       )}
                       {c.status === 'Completed' && (

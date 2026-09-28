@@ -50,31 +50,75 @@ export function QrScannerModal({ isOpen, onClose, onJobUpdated, targetJob }) {
         const qrElem = document.getElementById(qrId)
         if (!qrElem) return
 
+        // 1. Explicitly prompt for browser camera permission if available
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          try {
+            const probeStream = await navigator.mediaDevices.getUserMedia({ video: true })
+            probeStream.getTracks().forEach((track) => track.stop())
+          } catch (permErr) {
+            if (isMounted) {
+              setScannerError(
+                permErr?.name === 'NotAllowedError' || permErr?.name === 'PermissionDeniedError'
+                  ? 'Camera permission denied. Please click the camera icon in your browser URL bar to allow camera access, or enter the code manually.'
+                  : 'Unable to access camera. Please enter the code manually.'
+              )
+            }
+            return
+          }
+        }
+
         if (!html5QrCodeRef.current) {
           html5QrCodeRef.current = new Html5Qrcode(qrId)
         }
 
-        const cameras = await Html5Qrcode.getCameras()
-        if (!cameras || cameras.length === 0) {
-          setScannerError('No camera found on this device. Please use manual code entry.')
-          return
+        // Try environment/back camera first, then fall back to user/webcam
+        let started = false
+        try {
+          await html5QrCodeRef.current.start(
+            { facingMode: { ideal: 'environment' } },
+            {
+              fps: 10,
+              qrbox: { width: 220, height: 220 }
+            },
+            (decodedText) => {
+              if (isMounted) {
+                handleQrDetected(decodedText)
+              }
+            },
+            () => {}
+          )
+          started = true
+        } catch {
+          // If back camera failed, try user facing camera or first available camera
+          try {
+            const cameras = await Html5Qrcode.getCameras().catch(() => [])
+            const camConfig = cameras && cameras.length > 0 ? cameras[0].id : { facingMode: 'user' }
+            await html5QrCodeRef.current.start(
+              camConfig,
+              {
+                fps: 10,
+                qrbox: { width: 220, height: 220 }
+              },
+              (decodedText) => {
+                if (isMounted) {
+                  handleQrDetected(decodedText)
+                }
+              },
+              () => {}
+            )
+            started = true
+          } catch (fallbackErr) {
+            if (isMounted) {
+              setScannerError(
+                fallbackErr?.name === 'NotAllowedError'
+                  ? 'Camera permission denied. Please allow camera access in browser settings or use manual code entry.'
+                  : 'Unable to start camera stream. Please use manual code entry.'
+              )
+            }
+          }
         }
 
-        const cameraId = cameras[cameras.length - 1].id // prefer back camera
-        await html5QrCodeRef.current.start(
-          cameraId,
-          {
-            fps: 10,
-            qrbox: { width: 220, height: 220 }
-          },
-          (decodedText) => {
-            if (isMounted) {
-              handleQrDetected(decodedText)
-            }
-          },
-          () => {}
-        )
-        if (isMounted) setIsScanning(true)
+        if (isMounted && started) setIsScanning(true)
       } catch (err) {
         if (isMounted) {
           setScannerError(
@@ -99,9 +143,11 @@ export function QrScannerModal({ isOpen, onClose, onJobUpdated, targetJob }) {
   }, [isOpen, activeTab, scannedPass])
 
   const stopCamera = async () => {
-    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+    if (html5QrCodeRef.current) {
       try {
-        await html5QrCodeRef.current.stop()
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop()
+        }
       } catch {
         // ignore stop error
       }
@@ -213,14 +259,19 @@ export function QrScannerModal({ isOpen, onClose, onJobUpdated, targetJob }) {
     setScannerError('')
     setPickupSuccess('')
     try {
-      const extracted = extractRecoveryId(inputCode)
-      let recoveryId = extracted
-      if (!recoveryId.includes('-') || recoveryId.length !== 36) {
-        const cleanCode = inputCode.replace('LPW-PASS-', '').trim()
-        recoveryId = cleanCode
+      let codeToQuery = (inputCode || '').trim()
+      if (codeToQuery.includes('verify-handover/')) {
+        codeToQuery = codeToQuery.split('verify-handover/').pop()
       }
+      if (codeToQuery.includes('?')) {
+        codeToQuery = codeToQuery.split('?')[0]
+      }
+      if (codeToQuery.includes('#')) {
+        codeToQuery = codeToQuery.split('#')[0]
+      }
+      codeToQuery = codeToQuery.replace(/\/+$/, '').trim()
 
-      const res = await apiClient.get(`/api/recovery/${recoveryId}/handover-pass`)
+      const res = await apiClient.get(`/api/recovery/${encodeURIComponent(codeToQuery)}/handover-pass`)
       const data = res.data
 
       if (targetJob && targetJob.recoveryRequestId && data.recoveryRequestId !== targetJob.recoveryRequestId) {

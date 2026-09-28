@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using LoopWorth.Application.DTOs;
 using LoopWorth.Application.Interfaces;
 using LoopWorth.Domain.Entities;
@@ -82,8 +83,17 @@ public class PartnersController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create([FromBody] CreatePartnerDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.Email))
-            return BadRequest(new { error = "Organization Name and Email are required." });
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            return BadRequest(new { error = "Organization Name is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.ContactName))
+            return BadRequest(new { error = "Contact Person is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(new { error = "Official Email is required." });
+
+        if (!Regex.IsMatch(dto.Email.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            return BadRequest(new { error = "Please provide a valid official email address." });
 
         if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 8 ||
             !dto.Password.Any(char.IsUpper) || !dto.Password.Any(char.IsDigit))
@@ -91,10 +101,27 @@ public class PartnersController : ControllerBase
             return BadRequest(new { error = "Password must be at least 8 characters long, containing at least one uppercase letter and numbers." });
         }
 
+        if (string.IsNullOrWhiteSpace(dto.Phone))
+            return BadRequest(new { error = "Phone number is required." });
+
+        var cleanPhone = Regex.Replace(dto.Phone.Trim(), @"[\s\-()]", "");
+        if (cleanPhone.StartsWith("+94"))
+        {
+            cleanPhone = "0" + cleanPhone.Substring(3);
+        }
+        if (!Regex.IsMatch(cleanPhone, @"^[0-9]{10}$"))
+            return BadRequest(new { error = "Phone number must be exactly 10 digits (e.g. 0771234567)." });
+
+        if (string.IsNullOrWhiteSpace(dto.ServiceArea))
+            return BadRequest(new { error = "Service Area / District is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.OperatingHours))
+            return BadRequest(new { error = "Operating Hours are required." });
+
         if (dto.Services == null || dto.Services.Count == 0)
             return BadRequest(new { error = "Partner organization must support at least one accepted route and category." });
 
-        var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+        var existingUser = await _userManager.FindByEmailAsync(dto.Email.Trim());
         if (existingUser != null)
         {
             return Conflict(new { error = "A user account with this email already exists." });
@@ -103,10 +130,10 @@ public class PartnersController : ControllerBase
         // Create partner user account
         var user = new ApplicationUser
         {
-            UserName = dto.Email,
-            Email = dto.Email,
-            FullName = dto.ContactName,
-            PhoneNumber = dto.Phone,
+            UserName = dto.Email.Trim(),
+            Email = dto.Email.Trim(),
+            FullName = dto.ContactName.Trim(),
+            PhoneNumber = cleanPhone,
             EmailConfirmed = true
         };
 
@@ -121,12 +148,12 @@ public class PartnersController : ControllerBase
         var partner = new Partner
         {
             UserId = user.Id,
-            Name = dto.Name,
-            ContactName = dto.ContactName,
-            Email = dto.Email,
-            Phone = dto.Phone,
-            ServiceArea = dto.ServiceArea,
-            OperatingHours = dto.OperatingHours,
+            Name = dto.Name.Trim(),
+            ContactName = dto.ContactName.Trim(),
+            Email = dto.Email.Trim(),
+            Phone = cleanPhone,
+            ServiceArea = dto.ServiceArea.Trim(),
+            OperatingHours = dto.OperatingHours.Trim(),
             AverageProcessingDays = 1,
             IsActive = true
         };
@@ -157,6 +184,35 @@ public class PartnersController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdatePartnerDto dto)
     {
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            return BadRequest(new { error = "Organization Name is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.ContactName))
+            return BadRequest(new { error = "Contact Person is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(new { error = "Official Email is required." });
+
+        if (!Regex.IsMatch(dto.Email.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            return BadRequest(new { error = "Please provide a valid official email address." });
+
+        if (string.IsNullOrWhiteSpace(dto.Phone))
+            return BadRequest(new { error = "Phone number is required." });
+
+        var cleanPhone = Regex.Replace(dto.Phone.Trim(), @"[\s\-()]", "");
+        if (cleanPhone.StartsWith("+94"))
+        {
+            cleanPhone = "0" + cleanPhone.Substring(3);
+        }
+        if (!Regex.IsMatch(cleanPhone, @"^[0-9]{10}$"))
+            return BadRequest(new { error = "Phone number must be exactly 10 digits (e.g. 0771234567)." });
+
+        if (string.IsNullOrWhiteSpace(dto.ServiceArea))
+            return BadRequest(new { error = "Service Area / District is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.OperatingHours))
+            return BadRequest(new { error = "Operating Hours are required." });
+
         if (dto.Services == null || dto.Services.Count == 0)
             return BadRequest(new { error = "Partner organization must support at least one accepted route and category. Cannot save without services." });
 
@@ -183,12 +239,12 @@ public class PartnersController : ControllerBase
         if (newServices.Count == 0)
             return BadRequest(new { error = "Partner organization must support at least one accepted route (Donate or Recycle) and category." });
 
-        partner.Name = dto.Name;
-        partner.ContactName = dto.ContactName;
-        partner.Email = dto.Email;
-        partner.Phone = dto.Phone;
-        partner.ServiceArea = dto.ServiceArea;
-        partner.OperatingHours = dto.OperatingHours;
+        partner.Name = dto.Name.Trim();
+        partner.ContactName = dto.ContactName.Trim();
+        partner.Email = dto.Email.Trim();
+        partner.Phone = cleanPhone;
+        partner.ServiceArea = dto.ServiceArea.Trim();
+        partner.OperatingHours = dto.OperatingHours.Trim();
         partner.AverageProcessingDays = dto.AverageProcessingDays;
         partner.IsActive = dto.IsActive;
         partner.UpdatedAt = DateTime.UtcNow;
