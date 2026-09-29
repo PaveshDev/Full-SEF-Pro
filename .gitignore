@@ -54,4 +54,5 @@ upload-data/
 **/appsettings.json
 **/appsettings.Development.json
 scratch/
+apk/
 
