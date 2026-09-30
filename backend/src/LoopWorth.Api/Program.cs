@@ -85,10 +85,17 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 
 // JWT
 var jwtSecret = builder.Configuration["JwtSettings:Secret"]
+    ?? builder.Configuration["JWT_SECRET"]
     ?? Environment.GetEnvironmentVariable("JWT_SECRET")
-    ?? "LoopWorthDefaultDevelopmentSecretKeyMustBeAtLeast32CharsLong!";
-var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "LoopWorth";
-var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "LoopWorth";
+    ?? "DevOnly-LoopWorth-Secret-Key-Minimum-32-Characters-Long!";
+var jwtIssuer = builder.Configuration["JwtSettings:Issuer"]
+    ?? builder.Configuration["JWT_ISSUER"]
+    ?? Environment.GetEnvironmentVariable("JWT_ISSUER")
+    ?? "LoopWorth";
+var jwtAudience = builder.Configuration["JwtSettings:Audience"]
+    ?? builder.Configuration["JWT_AUDIENCE"]
+    ?? Environment.GetEnvironmentVariable("JWT_AUDIENCE")
+    ?? "LoopWorth";
 
 builder.Services.AddAuthentication(options =>
 {

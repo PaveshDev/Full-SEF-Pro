@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -50,8 +51,18 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } catch (e) {
+      String msg = 'Invalid email or password. Please try again.';
+      if (e is DioException) {
+        if (e.response?.data is Map && e.response?.data['error'] != null) {
+          msg = e.response?.data['error'].toString() ?? msg;
+        } else if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout) {
+          msg = 'Connection timed out. Please check your internet connection.';
+        } else if (e.response?.statusCode == 500) {
+          msg = 'Server error occurred. Please try again later.';
+        }
+      }
       setState(() {
-        _errorMessage = 'Invalid email or password. Please try again.';
+        _errorMessage = msg;
       });
     } finally {
       if (mounted) {

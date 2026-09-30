@@ -51,8 +51,9 @@ upload-data/
 # Keep package-lock.json, packages.lock.json, and pubspec.lock tracked.
 
 # Local secrets and development configuration
-**/appsettings.json
 **/appsettings.Development.json
+**/appsettings.Local.json
+!backend/src/LoopWorth.Api/appsettings.json
 scratch/
 apk/
 
