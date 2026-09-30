@@ -147,6 +147,23 @@ Do not include any text outside the JSON object.";
             var recommendedRoute = isDamaged ? RecoveryRoute.Recycle : RecoveryRoute.Donate;
             var altRoute = hasHazard ? (RecoveryRoute?)null : (isDamaged ? RecoveryRoute.Donate : RecoveryRoute.Recycle);
 
+            // Still enforce category consistency check in fallback
+            var (fallbackMatch, fallbackCat, fallbackReason, fallbackType) = CheckCategoryConsistency(item);
+            if (!fallbackMatch)
+            {
+                return new ItemAssessmentResult
+                {
+                    IsCategoryMatch = false,
+                    InconsistencyType = fallbackType,
+                    DetectedCategory = fallbackCat,
+                    MismatchReason = fallbackReason,
+                    ConditionLevel = ConditionLevel.Unknown,
+                    RecommendedRoute = RecoveryRoute.Recycle,
+                    ConfidenceLevel = ConfidenceLevel.High,
+                    Explanation = fallbackReason!
+                };
+            }
+
             return new ItemAssessmentResult
             {
                 IsCategoryMatch = true,
@@ -176,17 +193,31 @@ Do not include any text outside the JSON object.";
         var identityIsLaptop = identityText.Contains("macbook") || identityText.Contains("thinkpad") || identityText.Contains("dell xps") ||
                                identityText.Contains("laptop") || identityText.Contains("notebook") || identityText.Contains("chromebook") ||
                                identityText.Contains("zenbook") || identityText.Contains("ideapad") || identityText.Contains("vivobook") ||
-                               identityText.Contains("surface laptop");
+                               identityText.Contains("surface laptop") || identityText.Contains("tuf") || identityText.Contains("rog") ||
+                               identityText.Contains("zephyrus") || identityText.Contains("strix") || identityText.Contains("alienware") ||
+                               identityText.Contains("legion") || identityText.Contains("predator") || identityText.Contains("nitro") ||
+                               identityText.Contains("omen") || identityText.Contains("victus") || identityText.Contains("pavilion") ||
+                               identityText.Contains("inspiron") || identityText.Contains("latitude") || identityText.Contains("vostro") ||
+                               identityText.Contains("precision") || identityText.Contains("elitebook") || identityText.Contains("probook") ||
+                               identityText.Contains("spectre") || identityText.Contains("envy") || identityText.Contains("swift") ||
+                               identityText.Contains("aspire") || identityText.Contains("blade") || identityText.Contains("gram") ||
+                               identityText.Contains("yoga") || identityText.Contains("thinkbook") || identityText.Contains("gaming laptop");
 
         var identityIsTablet = identityText.Contains("ipad") || identityText.Contains("galaxy tab") || identityText.Contains("surface pro") ||
                                identityText.Contains("surface go") || identityText.Contains("tablet");
 
         // 2. Determine description device indicators
-        var descIsPhone = descText.Contains("iphone") || descText.Contains("smartphone") || descText.Contains("cell phone") || descText.Contains("sim tray");
+        var descIsPhone = descText.Contains("iphone") || descText.Contains("smartphone") || descText.Contains("cell phone") || descText.Contains("sim tray") || descText.Contains("mobile phone");
         var descIsLaptop = descText.Contains("macbook") || descText.Contains("thinkpad") || descText.Contains("zenbook") ||
                            descText.Contains("laptop") || descText.Contains("notebook") || descText.Contains("chromebook") ||
-                           descText.Contains("chassis overhaul");
+                           descText.Contains("chassis overhaul") || descText.Contains("tuf") || descText.Contains("cooling array") ||
+                           descText.Contains("cooling fan") || descText.Contains("heat pipe") || descText.Contains("motherboard");
         var descIsTablet = descText.Contains("ipad") || descText.Contains("tablet") || descText.Contains("stylus pen");
+
+        // Effective indicators: device identity OR description mentions (unless conflicting)
+        var isEffectivelyLaptop = identityIsLaptop || (descIsLaptop && !identityIsPhone);
+        var isEffectivelyPhone = identityIsPhone || (descIsPhone && !identityIsLaptop);
+        var isEffectivelyTablet = identityIsTablet || (descIsTablet && !identityIsLaptop && !identityIsPhone);
 
         // Category matching flags
         var isCatPhone = categoryName.Equals("Phone", StringComparison.OrdinalIgnoreCase) || categoryName.Equals("Small Electronics", StringComparison.OrdinalIgnoreCase);
@@ -196,7 +227,7 @@ Do not include any text outside the JSON object.";
         // --- SCENARIO 2: Description Inconsistency (Identity matches Category, but Description contradicts it!) ---
         if (identityIsPhone && isCatPhone && descIsLaptop)
         {
-            var detectedMention = descText.Contains("zenbook") ? "ASUS Zenbook laptop" : "laptop";
+            var detectedMention = descText.Contains("zenbook") ? "ASUS Zenbook laptop" : (descText.Contains("tuf") ? "ASUS TUF laptop" : "laptop");
             return (false, "Phone",
                 $"Description Inconsistency: '{item.Name}' is categorized correctly as a Phone, but the condition description appears to describe an {detectedMention} instead of your phone. Please edit the item's condition description to accurately describe your {item.Name}.",
                 "DescriptionMismatch");
@@ -217,22 +248,22 @@ Do not include any text outside the JSON object.";
                 "DescriptionMismatch");
         }
 
-        // --- SCENARIO 1: Category Mismatch (Identity does not match selected Category) ---
-        if (identityIsPhone && !isCatPhone)
-        {
-            return (false, "Phone",
-                $"Category Mismatch: '{item.Name}' is a mobile phone/smartphone, but was categorized under '{categoryName}'. Please edit the item and select the 'Phone' category.",
-                "CategoryMismatch");
-        }
-
-        if (identityIsLaptop && !isCatLaptop)
+        // --- SCENARIO 1: Category Mismatch (Identity/Description does not match selected Category) ---
+        if (isEffectivelyLaptop && !isCatLaptop)
         {
             return (false, "Laptop",
                 $"Category Mismatch: '{item.Name}' is a laptop computer, but was categorized under '{categoryName}'. Please edit the item and select the 'Laptop' category.",
                 "CategoryMismatch");
         }
 
-        if (identityIsTablet && !isCatTablet)
+        if (isEffectivelyPhone && !isCatPhone)
+        {
+            return (false, "Phone",
+                $"Category Mismatch: '{item.Name}' is a mobile phone/smartphone, but was categorized under '{categoryName}'. Please edit the item and select the 'Phone' category.",
+                "CategoryMismatch");
+        }
+
+        if (isEffectivelyTablet && !isCatTablet)
         {
             return (false, "Tablet",
                 $"Category Mismatch: '{item.Name}' is a tablet device, but was categorized under '{categoryName}'. Please edit the item and select the 'Tablet' category.",
