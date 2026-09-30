@@ -104,6 +104,15 @@ public class RecoveryWorkflowTests
         Assert.Contains(plan.PreparationSteps, s => s.Contains("peripheral", StringComparison.OrdinalIgnoreCase) || s.Contains("adapter", StringComparison.OrdinalIgnoreCase) || s.Contains("dongle", StringComparison.OrdinalIgnoreCase) || s.Contains("lid", StringComparison.OrdinalIgnoreCase));
         // Ensure safety notes address battery swelling hazard
         Assert.Contains(plan.SafetyNotes, s => s.Contains("battery", StringComparison.OrdinalIgnoreCase));
+
+        // Ensure checklist is tailored specifically for Laptop
+        Assert.NotNull(plan.Checklist);
+        Assert.NotEmpty(plan.Checklist);
+        Assert.DoesNotContain(plan.Checklist, c => c.Description.Contains("Google FRP", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.Checklist, c => c.Description.Contains("physical SIM", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Checklist, c => c.Title.Contains("Drive Wipe", StringComparison.OrdinalIgnoreCase) || c.Description.Contains("BitLocker", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Checklist, c => c.Description.Contains("dongle", StringComparison.OrdinalIgnoreCase) || c.Title.Contains("Storage & Dongles", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Checklist, c => c.Title.Contains("Laptop Packaging", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -135,5 +144,11 @@ public class RecoveryWorkflowTests
         Assert.NotNull(plan);
         Assert.Contains(plan.PreparationSteps, s => s.Contains("SIM", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.SafetyNotes, s => s.Contains("glass", StringComparison.OrdinalIgnoreCase));
+
+        // Ensure checklist is tailored specifically for Phone
+        Assert.NotNull(plan.Checklist);
+        Assert.NotEmpty(plan.Checklist);
+        Assert.Contains(plan.Checklist, c => c.Description.Contains("SIM", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Checklist, c => c.Description.Contains("Google FRP", StringComparison.OrdinalIgnoreCase) || c.Description.Contains("iCloud", StringComparison.OrdinalIgnoreCase));
     }
 }

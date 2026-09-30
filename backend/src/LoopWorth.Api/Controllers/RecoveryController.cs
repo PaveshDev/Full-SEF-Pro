@@ -89,6 +89,28 @@ public class RecoveryController : ControllerBase
         var recovery = await GetRecoveryWithIncludes(id);
         if (recovery == null) return NotFound();
         if (recovery.CustomerId != userId && !User.IsInRole("Admin")) return Forbid();
+
+        // Auto-upgrade legacy phone-specific checklist for non-phone items
+        if (recovery.Plan != null && !string.IsNullOrEmpty(recovery.Plan.ChecklistJson))
+        {
+            var itemCat = (recovery.Item.Category?.Name ?? "").ToLowerInvariant();
+            var itemName = (recovery.Item.Name ?? "").ToLowerInvariant();
+            bool isPhone = itemCat.Contains("phone") || itemName.Contains("phone") || itemName.Contains("iphone") || itemName.Contains("pixel");
+
+            if (!isPhone && (recovery.Plan.ChecklistJson.Contains("Google FRP lock") || recovery.Plan.ChecklistJson.Contains("physical SIM trays")))
+            {
+                var existingList = JsonSerializer.Deserialize<List<PreCollectionChecklistItemDto>>(recovery.Plan.ChecklistJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                var tailored = LoopWorth.Infrastructure.Agents.RecoveryPlanningAgent.GenerateTailoredChecklist(recovery.Item, recovery.SelectedRoute);
+                for (int i = 0; i < tailored.Count && i < existingList.Count; i++)
+                {
+                    tailored[i].IsCompleted = existingList[i].IsCompleted;
+                    tailored[i].CompletedAt = existingList[i].CompletedAt;
+                }
+                recovery.Plan.ChecklistJson = JsonSerializer.Serialize(tailored);
+                await _context.SaveChangesAsync();
+            }
+        }
+
         return Ok(MapToDto(recovery, recovery.Item));
     }
 
@@ -315,14 +337,9 @@ public class RecoveryController : ControllerBase
                 .FirstOrDefaultAsync(p => p.RecoveryRequestId == recovery.Id);
             if (oldPlan != null) _context.RecoveryPlans.Remove(oldPlan);
 
-            var defaultChecklist = new List<PreCollectionChecklistItemDto>
-            {
-                new() { Id = "data_wipe", Title = "Data Wipe & Factory Reset", Description = "Erase personal data, browser sessions, and accounts from device.", IsMandatory = true, IsCompleted = false },
-                new() { Id = "account_unlink", Title = "Unlink Cloud & Anti-Theft Lock", Description = "Disable iCloud / Find My / Google FRP lock to ensure device is reusable.", IsMandatory = true, IsCompleted = false },
-                new() { Id = "removable_media", Title = "Remove SIM & Memory Cards", Description = "Eject physical SIM trays, MicroSD cards, and external protective accessories.", IsMandatory = true, IsCompleted = false },
-                new() { Id = "battery_safety", Title = "Battery & Thermal Isolation", Description = "Verify battery is not swollen or leaking; tape exposed cracked terminals.", IsMandatory = true, IsCompleted = false },
-                new() { Id = "packaging", Title = "Secure Protective Packaging", Description = "Place device in a protective padded bubble envelope or snug cardboard box.", IsMandatory = true, IsCompleted = false }
-            };
+            var defaultChecklist = (result.Checklist != null && result.Checklist.Count > 0)
+                ? result.Checklist
+                : LoopWorth.Infrastructure.Agents.RecoveryPlanningAgent.GenerateTailoredChecklist(recovery.Item, recovery.SelectedRoute);
 
             var plan = new RecoveryPlan
             {
@@ -622,6 +639,25 @@ public class RecoveryController : ControllerBase
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
             }
             catch { }
+        }
+
+        // Ensure non-phone items (like laptops) always return the category-appropriate checklist
+        if (r.Plan != null)
+        {
+            var itemCat = (item.Category?.Name ?? "").ToLowerInvariant();
+            var itemName = (item.Name ?? "").ToLowerInvariant();
+            bool isPhone = itemCat.Contains("phone") || itemName.Contains("phone") || itemName.Contains("iphone") || itemName.Contains("pixel");
+
+            if (!isPhone && (checklist.Count == 0 || checklist.Any(c => c.Description.Contains("Google FRP lock") || c.Description.Contains("physical SIM trays"))))
+            {
+                var tailored = LoopWorth.Infrastructure.Agents.RecoveryPlanningAgent.GenerateTailoredChecklist(item, r.SelectedRoute);
+                for (int i = 0; i < tailored.Count && i < checklist.Count; i++)
+                {
+                    tailored[i].IsCompleted = checklist[i].IsCompleted;
+                    tailored[i].CompletedAt = checklist[i].CompletedAt;
+                }
+                checklist = tailored;
+            }
         }
 
         return new RecoveryRequestDto

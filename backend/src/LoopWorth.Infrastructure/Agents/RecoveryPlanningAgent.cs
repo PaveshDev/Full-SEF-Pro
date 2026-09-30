@@ -1,3 +1,4 @@
+using LoopWorth.Application.DTOs;
 using LoopWorth.Application.Interfaces;
 using LoopWorth.Domain.Entities;
 using LoopWorth.Domain.Enums;
@@ -81,6 +82,11 @@ Do not include any text outside the JSON object.";
             if (result.PreparationSteps == null || result.PreparationSteps.Count == 0)
                 throw new Exception("AI returned no preparation steps.");
 
+            if (result.Checklist == null || result.Checklist.Count == 0)
+            {
+                result.Checklist = GenerateTailoredChecklist(item, selectedRoute);
+            }
+
             return result;
         }
         catch (Exception ex)
@@ -88,6 +94,235 @@ Do not include any text outside the JSON object.";
             _logger.LogWarning(ex, "Gemini recovery planning unavailable or timed out. Generating tailored domain preparation plan for {ItemName} ({Category}).", item.Name, item.Category?.Name);
             return GenerateDynamicPreparationPlan(item, assessment, selectedRoute);
         }
+    }
+
+    public static List<PreCollectionChecklistItemDto> GenerateTailoredChecklist(Item item, RecoveryRoute selectedRoute)
+    {
+        var category = (item.Category?.Name ?? "").ToLowerInvariant();
+        var name = (item.Name ?? "").ToLowerInvariant();
+        var model = (item.Model ?? "").ToLowerInvariant();
+
+        var isLaptop = category.Contains("laptop") || name.Contains("laptop") || name.Contains("notebook") || name.Contains("macbook") || name.Contains("zenbook") || name.Contains("thinkpad");
+        var isPhone = category.Contains("phone") || name.Contains("phone") || name.Contains("iphone") || name.Contains("galaxy s") || name.Contains("pixel");
+        var isTablet = category.Contains("tablet") || name.Contains("tablet") || name.Contains("ipad") || name.Contains("galaxy tab") || name.Contains("surface");
+        var isAccessory = category.Contains("accessor") || category.Contains("computer accessories") || name.Contains("mouse") || name.Contains("keyboard") || name.Contains("headset") || name.Contains("charger");
+
+        if (isLaptop)
+        {
+            return new List<PreCollectionChecklistItemDto>
+            {
+                new()
+                {
+                    Id = "data_wipe",
+                    Title = "Data Backup & Drive Wipe",
+                    Description = "Back up personal files, sign out of cloud accounts, and perform operating system factory reset or disk wipe.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "account_unlink",
+                    Title = "Disable Disk Encryption & Account Locks",
+                    Description = "Turn off BitLocker / FileVault disk encryption and remove BIOS / Windows / Apple login passwords so device can be serviced.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "removable_media",
+                    Title = "Remove External Storage & Dongles",
+                    Description = "Unplug USB flash drives, wireless mouse nano-receivers, SD memory cards, and external storage drives.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "battery_safety",
+                    Title = "Battery & Charger Disconnection",
+                    Description = "Unplug the AC power adapter brick, power off completely, and inspect the chassis for battery swelling or bulging.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "packaging",
+                    Title = "Secure Laptop Packaging",
+                    Description = "Close display lid gently and pack laptop in a cushioned sleeve or sturdy padded box with charger secured alongside.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                }
+            };
+        }
+
+        if (isTablet)
+        {
+            return new List<PreCollectionChecklistItemDto>
+            {
+                new()
+                {
+                    Id = "data_wipe",
+                    Title = "Data Wipe & Factory Reset",
+                    Description = "Back up personal data to cloud, sign out of accounts, and perform tablet factory reset.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "account_unlink",
+                    Title = "Unlink Cloud & Activation Lock",
+                    Description = "Sign out of Apple ID (Find My) or Google Account (FRP) and remove screen lock passcodes.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "removable_media",
+                    Title = "Remove SIM, SD Card & Accessories",
+                    Description = "Eject SIM/MicroSD tray and detach external magnetic keyboards, folio cases, or stylus pens.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "battery_safety",
+                    Title = "Battery & Screen Integrity",
+                    Description = "Verify tablet battery is not bulging and ensure cracked screen glass is safely taped.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "packaging",
+                    Title = "Padded Screen Packaging",
+                    Description = "Pack tablet with glass display cushioned by cardboard or bubble wrap in a protective box.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                }
+            };
+        }
+
+        if (isAccessory)
+        {
+            return new List<PreCollectionChecklistItemDto>
+            {
+                new()
+                {
+                    Id = "data_wipe",
+                    Title = "Clear Internal Memory & Settings",
+                    Description = "Reset onboard profiles/firmware defaults and unpair Bluetooth/wireless connections if applicable.",
+                    IsMandatory = false,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "removable_media",
+                    Title = "Disconnect Cables & Remove Batteries",
+                    Description = "Remove AA/AAA batteries, detach USB cables, and remove wireless nano-dongles.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "battery_safety",
+                    Title = "Electrical Safety Inspection",
+                    Description = "Ensure cords are untangled with no frayed wires; inspect rechargeable cells for leakage.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "packaging",
+                    Title = "Box Packaging & Cord Bundling",
+                    Description = "Coil cables neatly with twist-ties and place accessory securely in a cushioned box.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                }
+            };
+        }
+
+        if (isPhone)
+        {
+            return new List<PreCollectionChecklistItemDto>
+            {
+                new()
+                {
+                    Id = "data_wipe",
+                    Title = "Data Wipe & Factory Reset",
+                    Description = "Erase personal data, browser sessions, and accounts from phone via system factory reset.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "account_unlink",
+                    Title = "Unlink Cloud & Anti-Theft Lock",
+                    Description = "Disable iCloud / Find My / Google FRP lock to ensure device is reusable.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "removable_media",
+                    Title = "Remove SIM & Memory Cards",
+                    Description = "Eject physical SIM trays, MicroSD cards, and external protective cases.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "battery_safety",
+                    Title = "Battery & Thermal Isolation",
+                    Description = "Verify battery is not swollen or leaking; tape exposed cracked terminals or damaged back glass.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                },
+                new()
+                {
+                    Id = "packaging",
+                    Title = "Secure Protective Packaging",
+                    Description = "Place phone in a protective padded bubble envelope or snug cardboard box for transit.",
+                    IsMandatory = true,
+                    IsCompleted = false
+                }
+            };
+        }
+
+        // Generic electronics fallback
+        return new List<PreCollectionChecklistItemDto>
+        {
+            new()
+            {
+                Id = "data_wipe",
+                Title = "Factory Reset & Account Logout",
+                Description = "Reset smart features/Wi-Fi configurations and disconnect associated companion apps.",
+                IsMandatory = false,
+                IsCompleted = false
+            },
+            new()
+            {
+                Id = "removable_media",
+                Title = "Remove Accessories & Peripherals",
+                Description = "Disconnect auxiliary cables, external power bricks, remote controls, and memory media.",
+                IsMandatory = true,
+                IsCompleted = false
+            },
+            new()
+            {
+                Id = "battery_safety",
+                Title = "Power Cord & Battery Safety",
+                Description = "Disconnect from mains power wall outlet, ensure unit is cold, and remove any disposable batteries.",
+                IsMandatory = true,
+                IsCompleted = false
+            },
+            new()
+            {
+                Id = "packaging",
+                Title = "Protective Carton Packaging",
+                Description = "Place equipment upright in a padded box with ample cushioning to prevent transit impact.",
+                IsMandatory = true,
+                IsCompleted = false
+            }
+        };
     }
 
     private static RecoveryPlanResult GenerateDynamicPreparationPlan(Item item, ItemAssessment assessment, RecoveryRoute selectedRoute)
@@ -151,7 +386,8 @@ Do not include any text outside the JSON object.";
                 Summary = $"Tailored preparation protocol for {item.Name} ({item.Category?.Name ?? "Laptop"}) designated for {selectedRoute}.",
                 PreparationSteps = steps,
                 SafetyNotes = safety,
-                RequiredPartnerType = selectedRoute == RecoveryRoute.Recycle ? "Certified E-Waste Recycler (IT & Computer Hardware)" : "Community Laptop Refurbishment Center"
+                RequiredPartnerType = selectedRoute == RecoveryRoute.Recycle ? "Certified E-Waste Recycler (IT & Computer Hardware)" : "Community Laptop Refurbishment Center",
+                Checklist = GenerateTailoredChecklist(item, selectedRoute)
             };
         }
 
@@ -194,7 +430,8 @@ Do not include any text outside the JSON object.";
                 Summary = $"Mobile device preparation and data security protocol for {item.Name} slated for {selectedRoute}.",
                 PreparationSteps = steps,
                 SafetyNotes = safety,
-                RequiredPartnerType = selectedRoute == RecoveryRoute.Recycle ? "Certified Mobile & Small Electronics Recycler" : "Mobile Device Donation & Rehoming Center"
+                RequiredPartnerType = selectedRoute == RecoveryRoute.Recycle ? "Certified Mobile & Small Electronics Recycler" : "Mobile Device Donation & Rehoming Center",
+                Checklist = GenerateTailoredChecklist(item, selectedRoute)
             };
         }
 
@@ -221,7 +458,8 @@ Do not include any text outside the JSON object.";
                 Summary = $"Tablet preparation protocol for {item.Name} slated for {selectedRoute}.",
                 PreparationSteps = steps,
                 SafetyNotes = safety,
-                RequiredPartnerType = selectedRoute == RecoveryRoute.Recycle ? "Certified Tablet & E-Waste Recycler" : "Educational Technology Donation Center"
+                RequiredPartnerType = selectedRoute == RecoveryRoute.Recycle ? "Certified Tablet & E-Waste Recycler" : "Educational Technology Donation Center",
+                Checklist = GenerateTailoredChecklist(item, selectedRoute)
             };
         }
 
@@ -242,7 +480,8 @@ Do not include any text outside the JSON object.";
                 "Ensure the equipment is completely powered down and disconnected from power outlets.",
                 "Do not include leaking or damaged batteries with the package."
             },
-            RequiredPartnerType = selectedRoute == RecoveryRoute.Recycle ? "Certified E-Waste Recycler" : "Charity Donation Center"
+            RequiredPartnerType = selectedRoute == RecoveryRoute.Recycle ? "Certified E-Waste Recycler" : "Charity Donation Center",
+            Checklist = GenerateTailoredChecklist(item, selectedRoute)
         };
     }
 }

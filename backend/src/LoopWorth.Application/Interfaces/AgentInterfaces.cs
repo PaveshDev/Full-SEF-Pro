@@ -1,3 +1,4 @@
+using LoopWorth.Application.DTOs;
 using LoopWorth.Domain.Entities;
 using LoopWorth.Domain.Enums;
 
@@ -49,6 +50,7 @@ public class RecoveryPlanResult
     public List<string> PreparationSteps { get; set; } = new();
     public List<string> SafetyNotes { get; set; } = new();
     public string RequiredPartnerType { get; set; } = string.Empty;
+    public List<PreCollectionChecklistItemDto> Checklist { get; set; } = new();
 }
 
 public interface IRecoveryPlanningAgent
