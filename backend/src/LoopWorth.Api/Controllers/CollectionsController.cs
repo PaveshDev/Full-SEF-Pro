@@ -935,10 +935,12 @@ public class CollectionsController : ControllerBase
     [Authorize(Roles = "Partner")]
     public async Task<IActionResult> PartnerConfirmReceipt(
         Guid id,
-        [FromForm] IFormFile? photo,
-        [FromForm] string? feedback,
-        [FromForm] bool conditionOk = true)
+        [FromForm] PartnerConfirmReceiptDto dto)
     {
+        var photo = dto.Photo;
+        var feedback = dto.Feedback;
+        var conditionOk = dto.ConditionOk;
+
         var userId = GetUserId();
         var user = await _userManager.FindByIdAsync(userId);
         var userEmail = user?.Email;
@@ -1203,4 +1205,11 @@ public class CollectionsController : ControllerBase
             CreatedAt = c.CreatedAt
         };
     }
+}
+
+public class PartnerConfirmReceiptDto
+{
+    public IFormFile? Photo { get; set; }
+    public string? Feedback { get; set; }
+    public bool ConditionOk { get; set; } = true;
 }

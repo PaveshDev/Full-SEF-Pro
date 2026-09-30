@@ -160,6 +160,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 // Seed on startup
 try
