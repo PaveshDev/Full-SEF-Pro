@@ -123,26 +123,27 @@ builder.Services.AddScoped<IDeliveryNotificationAgent, DeliveryNotificationAgent
 // CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("DevelopmentClients", policy =>
-        policy.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost" || new Uri(origin).Host == "127.0.0.1")
+    options.AddPolicy("AllowAll", policy =>
+        policy.AllowAnyOrigin()
             .AllowAnyHeader()
             .AllowAnyMethod());
 });
 
 var app = builder.Build();
 
-// Middleware pipeline
-if (app.Environment.IsDevelopment())
+app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-    app.UseCors("DevelopmentClients");
-}
-else
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+});
+
+// Middleware pipeline
+app.UseSwagger();
+app.UseSwaggerUI();
+app.UseCors("AllowAll");
+
+if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler();
-    app.UseHsts();
-    app.UseHttpsRedirection();
 }
 
 // Serve uploaded files
