@@ -1035,6 +1035,11 @@ public class CollectionsController : ControllerBase
         collection.DeliveryEmailSent = false; // Reset to allow explicit send/resend
         await TriggerDeliveryCompletionEmailAsync(collection, ct);
 
+        if (!collection.DeliveryEmailSent)
+        {
+            return BadRequest(new { error = "Failed to dispatch email via Brevo. Please check server logs and Brevo API key configuration." });
+        }
+
         return Ok(new
         {
             success = collection.DeliveryEmailSent,
@@ -1049,13 +1054,6 @@ public class CollectionsController : ControllerBase
 
         try
         {
-            var customer = await _userManager.FindByIdAsync(collection.CustomerId);
-            if (customer == null || string.IsNullOrWhiteSpace(customer.Email))
-            {
-                _logger.LogWarning("Cannot send delivery email: customer {CustomerId} not found or email is empty.", collection.CustomerId);
-                return;
-            }
-
             if (collection.Partner == null)
             {
                 await _context.Entry(collection).Reference(c => c.Partner).LoadAsync(ct);
@@ -1078,6 +1076,27 @@ public class CollectionsController : ControllerBase
             if (item == null || partner == null)
             {
                 _logger.LogWarning("Cannot send delivery email: item or partner is missing for collection {CollectionId}", collection.Id);
+                return;
+            }
+
+            // Lookup customer: try collection.CustomerId, then recovery.CustomerId, then item.CustomerId
+            LoopWorth.Infrastructure.Identity.ApplicationUser? customer = null;
+            if (!string.IsNullOrWhiteSpace(collection.CustomerId))
+            {
+                customer = await _userManager.FindByIdAsync(collection.CustomerId);
+            }
+            if (customer == null && collection.RecoveryRequest != null && !string.IsNullOrWhiteSpace(collection.RecoveryRequest.CustomerId))
+            {
+                customer = await _userManager.FindByIdAsync(collection.RecoveryRequest.CustomerId);
+            }
+            if (customer == null && item != null && !string.IsNullOrWhiteSpace(item.CustomerId))
+            {
+                customer = await _userManager.FindByIdAsync(item.CustomerId);
+            }
+
+            if (customer == null || string.IsNullOrWhiteSpace(customer.Email))
+            {
+                _logger.LogWarning("Cannot send delivery email: customer not found or email is empty for collection {CollectionId} (CustomerId: {CustomerId}).", collection.Id, collection.CustomerId);
                 return;
             }
 
@@ -1105,6 +1124,10 @@ public class CollectionsController : ControllerBase
                 collection.DeliveryEmailSubject = emailContent.Subject;
                 await _context.SaveChangesAsync(ct);
                 _logger.LogInformation("Delivery completion email successfully dispatched via Brevo for collection {CollectionId} to {Email}", collection.Id, customer.Email);
+            }
+            else
+            {
+                _logger.LogWarning("Brevo transactional email dispatch returned false for collection {CollectionId} to {Email}", collection.Id, customer.Email);
             }
         }
         catch (Exception ex)

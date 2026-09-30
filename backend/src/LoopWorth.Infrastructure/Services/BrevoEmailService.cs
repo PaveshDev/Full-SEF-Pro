@@ -18,20 +18,25 @@ public class BrevoEmailService : IEmailService
     {
         _httpClient = httpClient;
         _logger = logger;
-        _apiKey = configuration["Brevo:ApiKey"]
-            ?? configuration["BREVO_API_KEY"]
-            ?? Environment.GetEnvironmentVariable("BREVO_API_KEY")
-            ?? string.Empty;
+        _apiKey = ResolveConfig(configuration, "Brevo:ApiKey", "BREVO_API_KEY", "Brevo__ApiKey");
 
-        _senderEmail = configuration["Brevo:SenderEmail"]
-            ?? configuration["BREVO_SENDER_EMAIL"]
-            ?? Environment.GetEnvironmentVariable("BREVO_SENDER_EMAIL")
-            ?? "loopworthadmin@gmail.com";
+        _senderEmail = ResolveConfig(configuration, "Brevo:SenderEmail", "BREVO_SENDER_EMAIL", "Brevo__SenderEmail");
+        if (string.IsNullOrWhiteSpace(_senderEmail)) _senderEmail = "loopworthadmin@gmail.com";
 
-        _senderName = configuration["Brevo:SenderName"]
-            ?? configuration["BREVO_SENDER_NAME"]
-            ?? Environment.GetEnvironmentVariable("BREVO_SENDER_NAME")
-            ?? "LoopWorth Circular Recovery";
+        _senderName = ResolveConfig(configuration, "Brevo:SenderName", "BREVO_SENDER_NAME", "Brevo__SenderName");
+        if (string.IsNullOrWhiteSpace(_senderName)) _senderName = "LoopWorth Circular Recovery";
+    }
+
+    private static string ResolveConfig(IConfiguration config, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var val = config[key];
+            if (!string.IsNullOrWhiteSpace(val)) return val.Trim();
+            val = Environment.GetEnvironmentVariable(key);
+            if (!string.IsNullOrWhiteSpace(val)) return val.Trim();
+        }
+        return string.Empty;
     }
 
     public async Task<bool> SendEmailAsync(string toEmail, string toName, string subject, string htmlContent, CancellationToken cancellationToken = default)

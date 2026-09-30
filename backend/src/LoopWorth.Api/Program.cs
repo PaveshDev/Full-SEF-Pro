@@ -14,6 +14,24 @@ Program.LoadDotEnvFiles();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Propagate non-empty environment variables into builder.Configuration
+var envBrevoKey = Environment.GetEnvironmentVariable("BREVO_API_KEY");
+if (!string.IsNullOrWhiteSpace(envBrevoKey))
+{
+    builder.Configuration["Brevo:ApiKey"] = envBrevoKey;
+    builder.Configuration["BREVO_API_KEY"] = envBrevoKey;
+}
+var envBrevoSender = Environment.GetEnvironmentVariable("BREVO_SENDER_EMAIL");
+if (!string.IsNullOrWhiteSpace(envBrevoSender))
+{
+    builder.Configuration["Brevo:SenderEmail"] = envBrevoSender;
+}
+var envBrevoName = Environment.GetEnvironmentVariable("BREVO_SENDER_NAME");
+if (!string.IsNullOrWhiteSpace(envBrevoName))
+{
+    builder.Configuration["Brevo:SenderName"] = envBrevoName;
+}
+
 // Controllers
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -228,7 +246,7 @@ public partial class Program
                     {
                         var key = parts[0].Trim();
                         var val = parts[1].Trim();
-                        if (Environment.GetEnvironmentVariable(key) == null)
+                        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key)))
                         {
                             Environment.SetEnvironmentVariable(key, val);
                         }
