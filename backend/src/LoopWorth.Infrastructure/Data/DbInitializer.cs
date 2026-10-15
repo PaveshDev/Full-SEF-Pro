@@ -226,7 +226,8 @@ public static class DbInitializer
             logger.LogInformation("Seeded {Count} categories", categories.Count);
         }
 
-        // Seed Collection Agents — 2 per Sri Lankan district (idempotent per email)
+        // Seed Collection Agents — only when explicitly enabled via configuration or environment variable
+        if (config.GetValue<bool>("SeedCollectionAgents", false) || Environment.GetEnvironmentVariable("SEED_COLLECTION_AGENTS") == "true")
         {
             var districtAgents = new (string District, string Town, string Agent1Name, string Agent1Phone, string Agent2Name, string Agent2Phone)[]
             {

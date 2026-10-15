@@ -32,6 +32,16 @@ if (!string.IsNullOrWhiteSpace(envBrevoName))
     builder.Configuration["Brevo:SenderName"] = envBrevoName;
 }
 
+// Cloudinary Cloud Storage
+var envCloudName = Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD_NAME");
+var envCloudKey = Environment.GetEnvironmentVariable("CLOUDINARY_API_KEY");
+var envCloudSecret = Environment.GetEnvironmentVariable("CLOUDINARY_API_SECRET");
+var envCloudUrl = Environment.GetEnvironmentVariable("CLOUDINARY_URL");
+if (!string.IsNullOrWhiteSpace(envCloudName)) builder.Configuration["CLOUDINARY_CLOUD_NAME"] = envCloudName;
+if (!string.IsNullOrWhiteSpace(envCloudKey)) builder.Configuration["CLOUDINARY_API_KEY"] = envCloudKey;
+if (!string.IsNullOrWhiteSpace(envCloudSecret)) builder.Configuration["CLOUDINARY_API_SECRET"] = envCloudSecret;
+if (!string.IsNullOrWhiteSpace(envCloudUrl)) builder.Configuration["CLOUDINARY_URL"] = envCloudUrl;
+
 // Controllers
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -136,7 +146,23 @@ builder.Services.AddAuthentication(options =>
 
 // DI: Services
 builder.Services.AddHttpClient();
-builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+var hasCloudinary = !string.IsNullOrWhiteSpace(builder.Configuration["CLOUDINARY_API_KEY"]
+    ?? Environment.GetEnvironmentVariable("CLOUDINARY_API_KEY")
+    ?? builder.Configuration["CLOUDINARY_URL"]
+    ?? Environment.GetEnvironmentVariable("CLOUDINARY_URL"));
+
+if (hasCloudinary)
+{
+    Console.WriteLine("[LoopWorth Storage] Initializing CloudinaryFileStorageService for uploads...");
+    builder.Services.AddScoped<IFileStorageService, CloudinaryFileStorageService>();
+}
+else
+{
+    Console.WriteLine("[LoopWorth Storage] Cloudinary credentials not found. Using LocalFileStorageService...");
+    builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+}
+
+
 builder.Services.AddScoped<IEcoImpactAgent, EcoImpactAgent>();
 builder.Services.AddScoped<IItemAssessmentAgent, ItemAssessmentAgent>();
 builder.Services.AddScoped<IRecoveryPlanningAgent, RecoveryPlanningAgent>();
