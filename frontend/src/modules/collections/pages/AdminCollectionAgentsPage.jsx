@@ -15,6 +15,7 @@ export function AdminCollectionAgentsPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [phone, setPhone] = useState('')
   const [serviceArea, setServiceArea] = useState('')
   const [townArea, setTownArea] = useState('')
@@ -41,6 +42,7 @@ export function AdminCollectionAgentsPage() {
     setName('')
     setEmail('')
     setPassword('')
+    setConfirmPassword('')
     setPhone('')
     setServiceArea('')
     setTownArea('')
@@ -75,6 +77,10 @@ export function AdminCollectionAgentsPage() {
       }
       if (!password || password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
         setModalError('Password must be at least 8 characters long, containing at least one uppercase letter and numbers.')
+        return
+      }
+      if (password !== confirmPassword) {
+        setModalError('Passwords do not match. Please re-enter both password fields.')
         return
       }
     }
@@ -290,8 +296,22 @@ export function AdminCollectionAgentsPage() {
                         required
                         minLength={8}
                         className="form-input"
+                        placeholder="••••••••"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Confirm Password *</label>
+                      <input
+                        type="password"
+                        required
+                        minLength={8}
+                        className="form-input"
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
                       />
                     </div>
                   </>
