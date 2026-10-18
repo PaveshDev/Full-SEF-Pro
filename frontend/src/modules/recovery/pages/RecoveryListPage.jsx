@@ -33,7 +33,7 @@ export function RecoveryListPage() {
         <div className="page-header">
           <div className="page-title-group">
             <h1>Recovery Plans & Approvals</h1>
-            <div className="page-subtitle">Tracks your recovery requests through preparation, approval, and partner matching</div>
+            <div className="page-subtitle">Pavesh manages your recovery requests through preparation, approval, and partner matching</div>
           </div>
         </div>
 
